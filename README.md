@@ -13,17 +13,30 @@ It provides JWT-based authentication and a scalable architecture for modern back
 ```text
 AuthCore.API
 │
-├── Configs
-├── Controllers
-├── Data
-├── Middleware
-├── Models
-├── Repositories
-├── Services
-├── DTOs
+├── AuthCore.API
+|    ├── Configs
+|    ├── Controllers
+|    ├── Data
+|    ├── Middleware
+|    ├── Models
+|    ├── Repositories
+|    ├── Services
+|    ├── DTOs
+|    ├── Exceptions
+|    |   ├──  ApiException.cs
+|    |   ├──  BadRequestException.cs
+|    |   ├──  ConflictException.cs
+|    |   ├──  ForbiddenException.cs
+|    |   ├──  NotFoundException.cs
+|    |   ├──  UnauthorizationException.cs
+|    |   └──  VaidationExceptions.cs
+|    └── Middeleware
+|        └──  ExceptionHandlingMiddleware.cs
+├── .gitignore.cs
+├── AuthCore.API.csproj
 ├── Program.cs
 ├── appsettings.json
-└── AuthCore.API.csproj
+└── appsettings.json
 ```
 ---
 
