@@ -1,8 +1,9 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace AuthCore.API.DTOs;
- 
-public class RegisterDto {
+namespace AuthCore.API.DTOs.Auth;
+
+public class RegisterDto
+{
     [Required(ErrorMessage = "First name is required!")]
     [StringLength(50, MinimumLength = 2, ErrorMessage = "First name must be between 2 and 50 characters!")]
     public string FirstName { get; set; } = string.Empty;
@@ -44,7 +45,7 @@ public class RegisterDto {
     public string? Address { get; set; }
 
     [DataType(DataType.Date, ErrorMessage = "Invalid date format!")]
-    [CustomValidation(typeof(RegisterDto), nameof(ValidateBirthDate))]
+    [CustomValidation(typeof(ValidationResult), nameof(ValidateBirthDate))]
     public DateTime? BirthDate { get; set; }
 
     // Custom validator for BirthDate

@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace AuthCore.API.DTOs;
+namespace AuthCore.API.DTOs.Auth;
 
 public class LoginDto
 {
