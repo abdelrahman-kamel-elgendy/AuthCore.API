@@ -1,279 +1,256 @@
 # 🔐 AuthCore.API
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com)
-[![ASP.NET Core](https://img.shields.io/badge/ASP.NET-Core-blue)](https://learn.microsoft.com/aspnet/core)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![JWT](https://img.shields.io/badge/Auth-JWT-orange)](https://jwt.io)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**AuthCore.API** is a production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**.  
-It provides JWT access tokens, refresh token rotation, role-based authorization, and a clean layered architecture.
+A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles everything from registration to token rotation with a clean layered architecture.
 
 ---
 
-## ✨ Features
+## Features
 
-- 🔑 **JWT Authentication** — short-lived access tokens (1 hour)
-- 🔄 **Refresh Token Rotation** — secure 7-day refresh tokens, rotated on every use
-- 👤 **Role-Based Authorization** — `Admin` and `User` roles, seeded automatically
-- 🛡️ **Global Exception Handling** — middleware maps all exceptions to consistent JSON responses
-- 📦 **Layered Architecture** — Controller → Service → Repository
-- 📄 **Swagger UI** — interactive API docs with Bearer token support
-- 🐘 **PostgreSQL** via Entity Framework Core + auto-migration on startup
+- **JWT Authentication** — short-lived access tokens (1 hour) signed with HS256
+- **Refresh Token Rotation** — cryptographically random 64-byte tokens, rotated on every use, expire after 7 days
+- **Role-Based Authorization** — `Admin` and `User` roles seeded automatically at startup
+- **Global Exception Handling** — single middleware maps every exception type to a consistent JSON response
+- **Environment Secrets** — all secrets live in `.env`, loaded via `DotNetEnv`, never committed to git
+- **Unified Response Envelope** — every endpoint returns `ApiResponse<T>` with `success`, `message`, `data`, `errors`
+- **Swagger UI** — interactive docs with Bearer token support at `/swagger`
+- **Auto-Migration** — database migrates automatically on startup
 
 ---
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 AuthCore.API/
-│
 ├── Controllers/
-│   └── AuthController.cs          # Register, Login, RefreshToken, Logout
-│
+│   └── AuthController.cs              # Register, Login, RefreshToken, Logout
 ├── Data/
-│   └── ApplicationDbContext.cs    # EF Core DbContext (Identity + custom columns)
-│
+│   └── ApplicationDbContext.cs        # EF Core + Identity DbContext
 ├── DTOs/
 │   ├── Auth/
-│   │   ├── AuthResponseDto.cs     # Login / refresh response shape
-│   │   └── RefreshTokenDto.cs     # Refresh token request
-│   ├── LoginDto.cs                # Login request
-│   ├── RegisterDto.cs             # Registration request (with validation)
-│   └── UserDto.cs                 # User data transfer object
-│
+│   │   ├── AuthResponseDto.cs
+│   │   └── RefreshTokenDto.cs
+│   ├── LoginDto.cs
+│   ├── RegisterDto.cs
+│   └── UserDto.cs
 ├── Exceptions/
-│   ├── ApiException.cs            # Abstract base exception
-│   ├── BadRequestException.cs     # 400
-│   ├── ConflictException.cs       # 409
-│   ├── ForbiddenException.cs      # 403
-│   ├── NotFoundException.cs       # 404
-│   ├── UnauthorizedException.cs   # 401
-│   └── ValidationException.cs     # 400 with field-level errors
-│
+│   ├── ApiException.cs                # Abstract base (400–500)
+│   ├── BadRequestException.cs
+│   ├── ConflictException.cs
+│   ├── ForbiddenException.cs
+│   ├── NotFoundException.cs
+│   ├── UnauthorizedException.cs
+│   └── ValidationException.cs        # 400 with field-level error map
 ├── Middleware/
-│   └── ExceptionHandlingMiddleware.cs  # Global error → JSON response
-│
+│   └── ExceptionHandlingMiddleware.cs
 ├── Models/
-│   ├── ApiResponse.cs             # Unified response envelope
-│   ├── PagedList.cs               # Generic pagination wrapper
-│   ├── PaginationMetadata.cs      # Pagination info DTO
-│   └── UserModel.cs               # IdentityUser + custom fields
-│
+│   ├── ApiResponse.cs
+│   ├── PagedList.cs
+│   ├── PaginationMetadata.cs
+│   └── UserModel.cs                   # IdentityUser + refresh token fields
 ├── Repositories/
-│   ├── IAuthRepository.cs         # Repository contract
-│   └── AuthRepository.cs          # Identity-backed implementation
-│
+│   ├── IAuthRepository.cs
+│   └── AuthRepository.cs
 ├── Services/
-│   ├── Interfaces/
-│   │   └── IAuthService.cs        # Service contract
-│   └── AuthService.cs             # Business logic
-│
-├── Properties/
-│   └── launchSettings.json
-│
+│   ├── Interfaces/IAuthService.cs
+│   └── AuthService.cs
+├── Properties/launchSettings.json
+├── .env                               # ⚠️ Secrets — gitignored
+├── .env.example                       # ✅ Template — safe to commit
 ├── appsettings.json
 ├── appsettings.Development.json
 ├── AuthCore.API.csproj
-└── Program.cs                     # App bootstrap, DI, middleware pipeline
+└── Program.cs
 ```
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 
-| Tool | Version |
-|---|---|
-| [.NET SDK](https://dotnet.microsoft.com/download) | 8.0+ |
-| [PostgreSQL](https://www.postgresql.org/download/) | 14+ |
-| [EF Core CLI](https://learn.microsoft.com/ef/core/cli/dotnet) | 8.0+ |
+- [.NET 8 SDK](https://dotnet.microsoft.com/download)
+- [PostgreSQL 14+](https://www.postgresql.org/download/)
+- EF Core CLI — install once with `dotnet tool install --global dotnet-ef`
 
-Install the EF Core CLI if you haven't:
-```bash
-dotnet tool install --global dotnet-ef
-```
+---
 
 ### 1 — Clone & restore
 
 ```bash
 git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
-cd AuthCore.API/AuthCore.API
+cd AuthCore.API
 dotnet restore
 ```
 
-### 2 — Configure `appsettings.json`
+### 2 — Configure secrets
 
-Open `appsettings.json` and fill in your values:
-
-```json
-{
-  "ConnectionStrings": {
-    "PostgreSQL": "Host=localhost;Database=AuthCoreDB;Username=postgres;Password=YOUR_PASSWORD"
-  },
-  "JWT": {
-    "ValidIssuer":  "http://localhost:5000",
-    "ValidAudience": "http://localhost:4200",
-    "SecretKey": "REPLACE_WITH_A_LONG_RANDOM_SECRET_MIN_32_CHARS"
-  }
-}
+```bash
+cp .env.example .env
 ```
 
-> ⚠️ **Never commit real secrets.** Use environment variables or User Secrets in production.
+Edit `.env` with your values:
 
-### 3 — Run migrations
+```env
+ConnectionStrings__PostgreSQL=Host=localhost;Database=AuthCoreDB;Username=postgres;Password=your_password
+JWT__ValidIssuer=http://localhost:5000
+JWT__ValidAudience=http://localhost:4200
+JWT__SecretKey=at-least-32-chars-long-random-secret!@#$%
+```
+
+> `.env` is gitignored and will never be committed. In production, set these as real environment variables on your server or container — no `.env` file needed.
+
+The `__` separator maps to nested config: `JWT__SecretKey` → `JWT:SecretKey` in `IConfiguration`.
+
+### 3 — Migrate & run
 
 ```bash
 dotnet ef migrations add InitialCreate
 dotnet ef database update
-```
-
-> Migrations also run automatically on startup via `MigrateAsync()`.
-
-### 4 — Run
-
-```bash
 dotnet run
 ```
 
-Open **http://localhost:5000/swagger** to explore the API. 🎉
+Open **http://localhost:5000/swagger** 🎉
+
+> Migrations and role seeding also run automatically every startup.
 
 ---
 
-## 📡 API Reference
+## API Reference
 
-Base URL: `http://localhost:5000/api/auth`
+All endpoints are under `/api/auth`.
 
-### Register
-```http
-POST /api/auth/register
-Content-Type: application/json
+### POST `/register`
 
+```json
 {
   "firstName": "John",
-  "lastName": "Doe",
-  "username": "johndoe",
-  "email": "john@example.com",
-  "password": "Secret@123",
+  "lastName":  "Doe",
+  "username":  "johndoe",
+  "email":     "john@example.com",
+  "password":        "Secret@123",
   "confirmPassword": "Secret@123"
 }
 ```
 
-**Response `200 OK`:**
-```json
-{
-  "success": true,
-  "message": "Registration successful. Please check your email for confirmation.",
-  "data": { "isSuccess": true, "message": "..." }
-}
-```
+Optional fields: `phoneNumber`, `address`, `birthDate`, `profileURL`.
+
+Returns `200` with a success message. Returns `409` if email or username is already taken, `400` on validation errors.
 
 ---
 
-### Login
-```http
-POST /api/auth/login
-Content-Type: application/json
+### POST `/login`
 
+```json
 {
-  "email": "john@example.com",
+  "email":    "john@example.com",
   "password": "Secret@123"
 }
 ```
 
-**Response `200 OK`:**
 ```json
 {
   "success": true,
+  "message": "Login successful.",
   "data": {
-    "token": "eyJhbGci...",
+    "token":        "eyJhbGci...",
     "refreshToken": "abc123...",
-    "expiration": "2025-01-01T13:00:00Z",
-    "userId": "...",
-    "userName": "johndoe",
-    "email": "john@example.com",
-    "roles": ["User"]
+    "expiration":   "2026-03-08T14:00:00Z",
+    "userId":       "abc-123",
+    "userName":     "johndoe",
+    "email":        "john@example.com",
+    "roles":        ["User"]
   }
 }
 ```
 
+Returns `401` for invalid credentials, unconfirmed email, or deactivated account. The error message is always `"Invalid email or password."` — never revealing which field was wrong.
+
 ---
 
-### Refresh Token
-```http
-POST /api/auth/refresh-token
-Content-Type: application/json
+### POST `/refresh-token`
 
-{
-  "refreshToken": "abc123..."
-}
+```json
+{ "refreshToken": "abc123..." }
 ```
 
-Returns a new `token` + `refreshToken` pair. The old refresh token is invalidated.
+Returns a new `token` + `refreshToken` pair. The old refresh token is immediately invalidated (rotation). Returns `401` if the token is invalid or expired.
 
 ---
 
-### Logout
-```http
-POST /api/auth/logout
-Authorization: Bearer {token}
+### POST `/logout`  `🔒 Authorized`
+
+```
+Authorization: Bearer {access_token}
 ```
 
-Revokes the server-side refresh token. The access token expires naturally.
+Revokes the server-side refresh token. The access token expires naturally after its 1-hour window.
 
 ---
 
-## 🔒 Security Design
+## Response Format
 
-| Concern | Implementation |
-|---|---|
-| Password storage | ASP.NET Identity (PBKDF2 + salt) |
-| Access token | JWT, HS256, 1-hour expiry, `ClockSkew = 0` |
-| Refresh token | Cryptographically random (64 bytes), 7-day expiry, rotated on every use |
-| User enumeration | Login always returns `"Invalid email or password."` regardless of which is wrong |
-| Unconfirmed accounts | Blocked from logging in until email is confirmed |
-| Account lockout | 5 failed attempts → 15-minute lockout |
-| Password rules | Min 8 chars, uppercase, lowercase, digit, special character |
-| Stack trace exposure | Only shown in `Development` environment |
-
----
-
-## 🗂️ Response Format
-
-All endpoints return the same `ApiResponse<T>` envelope:
+Every endpoint returns the same envelope:
 
 ```json
 {
-  "success": true | false,
-  "message": "Human-readable message",
-  "data": { ... },
-  "errors": ["error1", "error2"],
+  "success": true,
+  "message": "...",
+  "data":    { },
+  "errors":  ["..."],
   "validationErrors": {
     "fieldName": ["error message"]
   }
 }
 ```
 
-`errors` and `validationErrors` are omitted (`null`) when not applicable.
+`errors` and `validationErrors` are omitted when empty.
 
 ---
 
-## 🧰 Tech Stack
+## Security
 
-| Layer | Technology |
+| Concern | Approach |
+|---|---|
+| Secrets | `.env` via DotNetEnv, gitignored |
+| Passwords | PBKDF2 + salt (ASP.NET Identity default) |
+| Access token | JWT HS256 · 1 hr · `ClockSkew = 0` |
+| Refresh token | 64 random bytes · 7 days · rotated on every use |
+| User enumeration | Login always returns the same error regardless of which field is wrong |
+| Email confirmation | Required before login is allowed |
+| Account lockout | 5 failed attempts → 15-minute lockout |
+| Password policy | Min 8 chars, uppercase, lowercase, digit, special character |
+| Error details | Stack traces only exposed in `Development` |
+
+---
+
+## Stack
+
+| | |
 |---|---|
 | Framework | ASP.NET Core 8 |
 | ORM | Entity Framework Core 8 |
-| Database | PostgreSQL 16 (via Npgsql) |
-| Authentication | ASP.NET Core Identity + JWT Bearer |
-| API Docs | Swashbuckle / Swagger |
+| Database | PostgreSQL via Npgsql |
+| Identity | ASP.NET Core Identity |
+| Secrets | DotNetEnv 3.1 |
+| Docs | Swashbuckle / Swagger 6.5 |
 
 ---
 
-## 📅 Changelog
+## Changelog
 
-| Version | Date | Notes |
-|---|---|---|
-| v2.0 | 2026-03-08 | Refresh tokens, global exception middleware, layered architecture, PostgreSQL |
-| v1.0 | 2023-08-20 | Initial release (SQL Server, basic JWT) |
+| Version | Notes |
+|---|---|
+| v2.1 | `.env` secrets via DotNetEnv |
+| v2.0 | Refresh tokens · global exception middleware · layered architecture · PostgreSQL |
+| v1.0 | Initial release — SQL Server, basic JWT |
+
+---
+
+## License
+
+[MIT](LICENSE)
