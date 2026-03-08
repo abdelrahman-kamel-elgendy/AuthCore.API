@@ -10,7 +10,7 @@ publish/
 .vs/
 .vscode/
 *.slnx
-*.csproj
+*.sln
 
 ## User-specific files
 appsettings.*.json
