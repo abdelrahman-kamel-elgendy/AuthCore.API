@@ -28,5 +28,6 @@ appsettings.*.json
 logs/
 *.log
 
-## powershell
-*.ps1
+## .env files
+.env
+!.env.example

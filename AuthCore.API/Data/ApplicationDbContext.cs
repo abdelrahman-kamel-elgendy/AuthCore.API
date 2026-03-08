@@ -1,5 +1,4 @@
 using AuthCore.API.Models;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,8 +11,6 @@ public class ApplicationDbContext : IdentityDbContext<UserModel>
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
-
-        // Configure UserModel extra columns
         builder.Entity<UserModel>(entity =>
         {
             entity.Property(u => u.FirstName).IsRequired().HasMaxLength(50);
