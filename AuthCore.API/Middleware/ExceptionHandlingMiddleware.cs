@@ -7,18 +7,18 @@ namespace AuthCore.API.Middleware;
 
 public class ExceptionHandlingMiddleware
 {
-    private readonly RequestDelegate              _next;
+    private readonly RequestDelegate _next;
     private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    private readonly IWebHostEnvironment          _env;
+    private readonly IWebHostEnvironment _env;
 
     public ExceptionHandlingMiddleware(
         RequestDelegate next,
         ILogger<ExceptionHandlingMiddleware> logger,
         IWebHostEnvironment env)
     {
-        _next   = next;
+        _next = next;
         _logger = logger;
-        _env    = env;
+        _env = env;
     }
 
     public async Task InvokeAsync(HttpContext context)
@@ -37,7 +37,7 @@ public class ExceptionHandlingMiddleware
     {
         _logger.LogError(exception, "Unhandled exception: {Message}", exception.Message);
 
-        var response    = context.Response;
+        var response = context.Response;
         response.ContentType = "application/json";
 
         var apiResponse = new ApiResponse<object> { Success = false };
@@ -45,15 +45,15 @@ public class ExceptionHandlingMiddleware
         switch (exception)
         {
             case Exceptions.ValidationException validationEx:
-                response.StatusCode      = (int)HttpStatusCode.BadRequest;
-                apiResponse.Message      = validationEx.Message;
+                response.StatusCode = (int)HttpStatusCode.BadRequest;
+                apiResponse.Message = validationEx.Message;
                 apiResponse.ValidationErrors = validationEx.Errors;
                 break;
 
             case BadRequestException badRequestEx:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
                 apiResponse.Message = badRequestEx.Message;
-                apiResponse.Errors  = new List<string> { badRequestEx.Details ?? badRequestEx.Message };
+                apiResponse.Errors = new List<string> { badRequestEx.Details ?? badRequestEx.Message };
                 break;
 
             case NotFoundException notFoundEx:
@@ -74,7 +74,7 @@ public class ExceptionHandlingMiddleware
             case ConflictException conflictEx:
                 response.StatusCode = (int)HttpStatusCode.Conflict;
                 apiResponse.Message = conflictEx.Message;
-                apiResponse.Errors  = new List<string> { conflictEx.Details ?? conflictEx.Message };
+                apiResponse.Errors = new List<string> { conflictEx.Details ?? conflictEx.Message };
                 break;
 
             default:

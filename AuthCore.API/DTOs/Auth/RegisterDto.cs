@@ -44,17 +44,7 @@ public class RegisterDto
     [StringLength(200, ErrorMessage = "Address cannot exceed 200 characters!")]
     public string? Address { get; set; }
 
-    [DataType(DataType.Date, ErrorMessage = "Invalid date format!")]
-    [CustomValidation(typeof(ValidationResult), nameof(ValidateBirthDate))]
+    [DataType(DataType.Date)]
+    [CustomValidation(typeof(DateValidator), nameof(DateValidator.Validate))]
     public DateTime? BirthDate { get; set; }
-
-    // Custom validator for BirthDate
-    public static ValidationResult? ValidateBirthDate(DateTime? birthDate, ValidationContext context)
-    {
-        if (birthDate.HasValue)
-            if (birthDate.Value > DateTime.Today)
-                return new ValidationResult("Birth date cannot be in the future!");
-
-        return ValidationResult.Success;
-    }
 }
