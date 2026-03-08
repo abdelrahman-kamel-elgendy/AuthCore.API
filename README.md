@@ -49,7 +49,7 @@ AuthCore.API/
 │   ├── ForbiddenException.cs      # 403
 │   ├── NotFoundException.cs       # 404
 │   ├── UnauthorizedException.cs   # 401
-│   └── ValidationException.cs    # 400 with field-level errors
+│   └── ValidationException.cs     # 400 with field-level errors
 │
 ├── Middleware/
 │   └── ExceptionHandlingMiddleware.cs  # Global error → JSON response
@@ -62,12 +62,12 @@ AuthCore.API/
 │
 ├── Repositories/
 │   ├── IAuthRepository.cs         # Repository contract
-│   └── AuthRepository.cs         # Identity-backed implementation
+│   └── AuthRepository.cs          # Identity-backed implementation
 │
 ├── Services/
 │   ├── Interfaces/
 │   │   └── IAuthService.cs        # Service contract
-│   └── AuthService.cs            # Business logic
+│   └── AuthService.cs             # Business logic
 │
 ├── Properties/
 │   └── launchSettings.json
@@ -277,9 +277,3 @@ All endpoints return the same `ApiResponse<T>` envelope:
 |---|---|---|
 | v2.0 | 2026-03-08 | Refresh tokens, global exception middleware, layered architecture, PostgreSQL |
 | v1.0 | 2023-08-20 | Initial release (SQL Server, basic JWT) |
-
----
-
-## 📄 License
-
-This project is licensed under the [MIT License](LICENSE).
