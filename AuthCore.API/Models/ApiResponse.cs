@@ -7,52 +7,37 @@ public class ApiResponse<T>
     public bool Success { get; set; }
     public string? Message { get; set; }
     public T? Data { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Errors { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IDictionary<string, string[]>? ValidationErrors { get; set; }
 
-    public ApiResponse()
+    public static ApiResponse<T> Ok(T data, string? message = null) => new()
     {
-        Success = true;
-    }
+        Success = true,
+        Data = data,
+        Message = message
+    };
 
-    public static ApiResponse<T> Ok(T data, string? message = null)
+    public static ApiResponse<T> Ok(string? message = null) => new()
     {
-        return new ApiResponse<T>
-        {
-            Success = true,
-            Data = data,
-            Message = message
-        };
-    }
+        Success = true,
+        Message = message
+    };
 
-    public static ApiResponse<T> Ok(string? message = null)
+    public static ApiResponse<T> Fail(string message, List<string>? errors = null) => new()
     {
-        return new ApiResponse<T>
-        {
-            Success = true,
-            Message = message
-        };
-    }
+        Success = false,
+        Message = message,
+        Errors = errors
+    };
 
-    public static ApiResponse<T> Fail(string message, List<string>? errors = null)
+    public static ApiResponse<T> Fail(string message, IDictionary<string, string[]> validationErrors) => new()
     {
-        return new ApiResponse<T>
-        {
-            Success = false,
-            Message = message,
-            Errors = errors
-        };
-    }
-
-    public static ApiResponse<T> Fail(string message, IDictionary<string, string[]> validationErrors)
-    {
-        return new ApiResponse<T>
-        {
-            Success = false,
-            Message = message,
-            ValidationErrors = validationErrors
-        };
-    }
+        Success = false,
+        Message = message,
+        ValidationErrors = validationErrors
+    };
 }

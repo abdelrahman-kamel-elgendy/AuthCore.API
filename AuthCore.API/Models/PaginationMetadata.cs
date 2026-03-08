@@ -9,13 +9,16 @@ public class PaginationMetadata
     public bool HasPrevious { get; set; }
     public bool HasNext { get; set; }
 
-    public PaginationMetadata(PagedList<object> pagedList)
+    /// <summary>
+    /// Static factory — accepts any PagedList&lt;T&gt; without casting to object.
+    /// </summary>
+    public static PaginationMetadata From<T>(PagedList<T> pagedList) => new()
     {
-        CurrentPage = pagedList.PageNumber;
-        TotalPages = pagedList.TotalPages;
-        PageSize = pagedList.PageSize;
-        TotalCount = pagedList.TotalCount;
-        HasPrevious = pagedList.HasPreviousPage;
-        HasNext = pagedList.HasNextPage;
-    }
+        CurrentPage = pagedList.PageNumber,
+        TotalPages = pagedList.TotalPages,
+        PageSize = pagedList.PageSize,
+        TotalCount = pagedList.TotalCount,
+        HasPrevious = pagedList.HasPreviousPage,
+        HasNext = pagedList.HasNextPage
+    };
 }
