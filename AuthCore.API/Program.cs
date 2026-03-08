@@ -1,6 +1,8 @@
 using AuthCore.API.Data;
 using AuthCore.API.Models;
+using AuthCore.API.Repositories;
 using AuthCore.API.Services;
+using AuthCore.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -21,7 +23,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "AuthCore API",
         Version = "v1",
-        Description = "Authentication API with JWT"
+        Description = "Authentication API with JWT and PostgreSQL"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -49,12 +51,12 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Configure Database
+// Configure PostgreSQL Database
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
 
 // Configure Identity
-builder.Services.AddIdentity<User, IdentityRole>(options =>
+builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
 {
     // Password settings
     options.Password.RequireDigit = true;
@@ -101,7 +103,8 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
-// Register Services
+// Register Repositories and Services
+builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 
 var app = builder.Build();
@@ -117,5 +120,12 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
+
+// Create database and apply migrations on startup
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 app.Run();
