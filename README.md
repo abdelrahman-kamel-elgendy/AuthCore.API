@@ -10,6 +10,7 @@ It provides JWT-based authentication and a scalable architecture for modern back
 ---
 
 ## 🏗️ Project Structure 
+```text
 AuthCore.API
 │
 ├── Configs
@@ -23,7 +24,7 @@ AuthCore.API
 ├── Program.cs
 ├── appsettings.json
 └── AuthCore.API.csproj
-
+```
 ---
 
 ## 🚀 Technologies
