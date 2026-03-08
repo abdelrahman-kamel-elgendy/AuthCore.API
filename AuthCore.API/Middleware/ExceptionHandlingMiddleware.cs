@@ -85,13 +85,11 @@ public class ExceptionHandlingMiddleware
                 apiResponse.Message = "An internal server error occurred. Please try again later.";
 
                 if (_env.IsDevelopment())
-                {
-                    apiResponse.Errors = new List<string>
-                    {
+                    apiResponse.Errors = new List<string> {
                         exception.Message,
                         exception.StackTrace ?? string.Empty
                     };
-                }
+
                 break;
         }
 
