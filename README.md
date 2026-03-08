@@ -19,6 +19,10 @@ AuthCore.API
 |    ├── Data
 |    ├── Middleware
 |    ├── Models
+|    |   ├──  ApiResponse.cs
+|    |   ├──  PagedList.cs
+|    |   ├──  PaginationMetadata.cs
+|    |   └──  User.cs
 |    ├── Repositories
 |    ├── Services
 |    ├── DTOs
