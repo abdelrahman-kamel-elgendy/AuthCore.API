@@ -16,16 +16,16 @@ AuthCore.API
 ├── AuthCore.API
 |    ├── Configs
 |    ├── Controllers
+|    |   └──  AuthController.cs
 |    ├── Data
-|    ├── Middleware
-|    ├── Models
-|    |   ├──  ApiResponse.cs
-|    |   ├──  PagedList.cs
-|    |   ├──  PaginationMetadata.cs
-|    |   └──  User.cs
-|    ├── Repositories
-|    ├── Services
+|    |   └──  ApplicationDbContext.cs
 |    ├── DTOs
+|    |   └──  Auth
+|    |      ├──  AuthResponseDto.cs
+|    |      ├──  LoginDto.cs
+|    |      ├──  LogoutDto.cs
+|    |      ├──  RefreshTokenDto.cs
+|    |      └──  RegisterDto.cs
 |    ├── Exceptions
 |    |   ├──  ApiException.cs
 |    |   ├──  BadRequestException.cs
@@ -34,8 +34,19 @@ AuthCore.API
 |    |   ├──  NotFoundException.cs
 |    |   ├──  UnauthorizationException.cs
 |    |   └──  VaidationExceptions.cs
-|    └── Middeleware
-|        └──  ExceptionHandlingMiddleware.cs
+|    ├── Middeleware
+|    |   └──  ExceptionHandlingMiddleware.cs
+|    ├── Models
+|    |   ├──  ApiResponse.cs
+|    |   ├──  PagedList.cs
+|    |   ├──  PaginationMetadata.cs
+|    |   └──  User.cs
+|    ├── Repositories
+|    |   ├──  AuthRepository.cs
+|    |   └──  IAuthService.cs
+|    └── Services
+|        ├──  AuthService.cs
+|        └──  IAuthService.cs
 ├── .gitignore.cs
 ├── AuthCore.API.csproj
 ├── Program.cs
