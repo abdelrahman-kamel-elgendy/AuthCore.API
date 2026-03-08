@@ -59,7 +59,6 @@ AuthCore.API/
 │   ├── Interfaces/IAuthService.cs
 │   └── AuthService.cs
 ├── Properties/launchSettings.json
-├── .env                               # ⚠️ Secrets — gitignored
 ├── .env.example                       # ✅ Template — safe to commit
 ├── appsettings.json
 ├── appsettings.Development.json

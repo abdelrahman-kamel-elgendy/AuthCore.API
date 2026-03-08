@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using AuthCore.API.DTOs.Auth;
 using AuthCore.API.Models;
-using AuthCore.API.Services;
+using AuthCore.API.Services.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
