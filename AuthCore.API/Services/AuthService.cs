@@ -1,5 +1,6 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Text;
 using AuthCore.API.DTOs;
 using AuthCore.API.DTOs.Auth;
@@ -7,7 +8,6 @@ using AuthCore.API.Exceptions;
 using AuthCore.API.Models;
 using AuthCore.API.Repositories;
 using AuthCore.API.Services.Interfaces;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AuthCore.API.Services;
@@ -28,42 +28,43 @@ public class AuthService : IAuthService
         _logger = logger;
     }
 
-    public async Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto)
+    // ── Register ──────────────────────────────────────────────────────────────
+
+    public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
-        if (await _authRepository.UserExistsByEmailAsync(registerDto.Email))
-            throw new ConflictException("Email is already registered");
+        if (await _authRepository.UserExistsByEmailAsync(dto.Email))
+            throw new ConflictException("Email is already registered.");
 
-        if (await _authRepository.UserExistsByUserNameAsync(registerDto.Username))
-            throw new ConflictException("Username is already taken");
+        if (await _authRepository.UserExistsByUserNameAsync(dto.Username))
+            throw new ConflictException("Username is already taken.");
 
-        // Create new user
-        UserModel user = new UserModel
+        var user = new UserModel
         {
-            FirstName = registerDto.FirstName,
-            LastName = registerDto.LastName,
-
-            UserName = registerDto.Username,
-            Email = registerDto.Email,
+            FirstName = dto.FirstName,
+            LastName = dto.LastName,
+            UserName = dto.Username,
+            Email = dto.Email,
             EmailConfirmed = false,
-
-            ProfileURL = registerDto.ProfileURL != null ? registerDto.ProfileURL : null,
-
-            PhoneNumber = registerDto.PhoneNumber != null ? registerDto.PhoneNumber : null,
-
-            Address = registerDto.Address != null ? registerDto.Address : null,
-
-            BirthDate = registerDto.BirthDate != null ? registerDto.BirthDate : null,
-
+            ProfileURL = dto.ProfileURL,
+            PhoneNumber = dto.PhoneNumber,
+            Address = dto.Address,
+            BirthDate = dto.BirthDate,
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
-
             IsActive = true
         };
 
-        await _authRepository.CreateUserAsync(user, registerDto.Password);
+        // Throw a ValidationException if Identity rejects the user (e.g. weak password)
+        var result = await _authRepository.CreateUserAsync(user, dto.Password);
+        if (!result.Succeeded)
+        {
+            var errors = result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description });
+            throw new ValidationException(errors);
+        }
+
         await _authRepository.AddToRoleAsync(user, "User");
 
-        _logger.LogInformation("User registered successfully: {Email}", user.Email);
+        _logger.LogInformation("New user registered: {Email}", user.Email);
 
         return new AuthResponseDto
         {
@@ -72,71 +73,125 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task<AuthResponseDto> LoginAsync(LoginDto loginDto)
+    // ── Login ─────────────────────────────────────────────────────────────────
+
+    public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
-        // Get user by email
-        var user = await _authRepository.GetUserByEmailAsync(loginDto.Email);
+        var user = await _authRepository.GetUserByEmailAsync(dto.Email);
 
-        // Check if user exists
-        if (user == null)
-            throw new NotFoundException("user", loginDto.Email);
+        // Generic error — never reveal whether the email or password was wrong
+        if (user == null || !await _authRepository.CheckPasswordAsync(user, dto.Password))
+            throw new UnauthorizedException("Invalid email or password.");
 
-        // Check if user is active
+        if (!user.EmailConfirmed)
+            throw new UnauthorizedException("Please confirm your email address before logging in.");
+
         if (!user.IsActive)
-            throw new ForbiddenException("Account is deactivated");
+            throw new ForbiddenException("Your account has been deactivated.");
 
-        // Check password
-        if (!await _authRepository.CheckPasswordAsync(user, loginDto.Password))
-            throw new UnauthorizedException("Invalid email or password");
-
-        // Get user roles
         var roles = await _authRepository.GetUserRolesAsync(user);
+        var accessToken = GenerateAccessToken(user, roles);
+        var refreshToken = GenerateRefreshToken();
 
-        // Generate token
-        var token = await GenerateJwtTokenAsync(user, roles);
+        await _authRepository.SaveRefreshTokenAsync(user, refreshToken);
 
-        _logger.LogInformation("User logged in successfully: {Email}", user.Email);
+        _logger.LogInformation("User logged in: {Email}", user.Email);
 
         return new AuthResponseDto
         {
             IsSuccess = true,
-            Message = "Login successful",
-            Token = new JwtSecurityTokenHandler().WriteToken(token),
-            Expiration = token.ValidTo,
+            Message = "Login successful.",
+            Token = new JwtSecurityTokenHandler().WriteToken(accessToken),
+            RefreshToken = refreshToken,
+            Expiration = accessToken.ValidTo,
+            UserId = user.Id,
             UserName = user.UserName,
             Email = user.Email,
             Roles = roles.ToList()
         };
     }
 
-    private async Task<JwtSecurityToken> GenerateJwtTokenAsync(UserModel user, IList<string> roles)
+    // ── Refresh Token ─────────────────────────────────────────────────────────
+
+    public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto dto)
+    {
+        var user = await _authRepository.GetUserByRefreshTokenAsync(dto.RefreshToken);
+
+        if (user == null)
+            throw new UnauthorizedException("Invalid refresh token.");
+
+        if (user.RefreshTokenExpiryTime <= DateTime.UtcNow)
+            throw new UnauthorizedException("Refresh token has expired. Please log in again.");
+
+        var roles = await _authRepository.GetUserRolesAsync(user);
+        var newAccessToken = GenerateAccessToken(user, roles);
+        var newRefreshToken = GenerateRefreshToken();
+
+        // Rotate the refresh token
+        await _authRepository.SaveRefreshTokenAsync(user, newRefreshToken);
+
+        _logger.LogInformation("Token refreshed for: {Email}", user.Email);
+
+        return new AuthResponseDto
+        {
+            IsSuccess = true,
+            Message = "Token refreshed successfully.",
+            Token = new JwtSecurityTokenHandler().WriteToken(newAccessToken),
+            RefreshToken = newRefreshToken,
+            Expiration = newAccessToken.ValidTo,
+            UserId = user.Id,
+            UserName = user.UserName,
+            Email = user.Email,
+            Roles = roles.ToList()
+        };
+    }
+
+    // ── Logout ────────────────────────────────────────────────────────────────
+
+    public async Task LogoutAsync(string userId)
+    {
+        var user = await _authRepository.GetUserByIdAsync(userId);
+        if (user is null) return;
+
+        await _authRepository.RevokeRefreshTokenAsync(user);
+        _logger.LogInformation("User logged out: {UserId}", userId);
+    }
+
+    // ── Private Helpers ───────────────────────────────────────────────────────
+
+    private JwtSecurityToken GenerateAccessToken(UserModel user, IList<string> roles)
     {
         var jwtSettings = _configuration.GetSection("JWT");
-        var secretKey = jwtSettings["SecretKey"] ?? throw new InvalidOperationException("JWT SecretKey is not configured");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
-        var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
+        var secretKey = jwtSettings["SecretKey"]
+            ?? throw new InvalidOperationException("JWT SecretKey is not configured.");
 
-        // Create claims
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(secretKey));
+
         var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.Id),
-            new Claim(JwtRegisteredClaimNames.Email, user.Email!),
-            new Claim(JwtRegisteredClaimNames.Name, user.UserName!),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-            new Claim("user_id", user.Id),
-            new Claim("is_active", user.IsActive.ToString())
+            new(JwtRegisteredClaimNames.Sub,   user.Id),
+            new(JwtRegisteredClaimNames.Email, user.Email!),
+            new(JwtRegisteredClaimNames.Name,  user.UserName!),
+            new(JwtRegisteredClaimNames.Jti,   Guid.NewGuid().ToString()),
+            new("is_active", user.IsActive.ToString())
         };
 
-        // Add role claims
-        claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
+        claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
-        // Create token
         return new JwtSecurityToken(
             issuer: jwtSettings["ValidIssuer"],
             audience: jwtSettings["ValidAudience"],
             claims: claims,
             expires: DateTime.UtcNow.AddHours(1),
-            signingCredentials: credentials
+            signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
         );
+    }
+
+    private static string GenerateRefreshToken()
+    {
+        var bytes = new byte[64];
+        using var rng = RandomNumberGenerator.Create();
+        rng.GetBytes(bytes);
+        return Convert.ToBase64String(bytes);
     }
 }

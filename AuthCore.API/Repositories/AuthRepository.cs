@@ -8,6 +8,7 @@ public class AuthRepository : IAuthRepository
 {
     private readonly UserManager<UserModel> _userManager;
     private readonly RoleManager<IdentityRole> _roleManager;
+    private readonly ILogger<AuthRepository> _logger;
 
     public AuthRepository(
         UserManager<UserModel> userManager,
@@ -16,49 +17,42 @@ public class AuthRepository : IAuthRepository
     {
         _userManager = userManager;
         _roleManager = roleManager;
+        _logger = logger;
     }
 
-    // User Management
+    // == User Management =======================================================
+
     public async Task<UserModel?> GetUserByIdAsync(string userId)
-    {
-        return await _userManager.FindByIdAsync(userId);
-    }
+        => await _userManager.FindByIdAsync(userId);
 
     public async Task<UserModel?> GetUserByEmailAsync(string email)
-    {
-        return await _userManager.FindByEmailAsync(email);
-    }
+        => await _userManager.FindByEmailAsync(email);
 
     public async Task<UserModel?> GetUserByUserNameAsync(string userName)
-    {
-        return await _userManager.FindByNameAsync(userName);
-    }
+        => await _userManager.FindByNameAsync(userName);
 
     public async Task<bool> CheckPasswordAsync(UserModel user, string password)
-    {
-        return await _userManager.CheckPasswordAsync(user, password);
-    }
+        => await _userManager.CheckPasswordAsync(user, password);
 
     public async Task<IdentityResult> CreateUserAsync(UserModel user, string password)
     {
-        return await _userManager.CreateAsync(user, password);
+        var result = await _userManager.CreateAsync(user, password);
+        if (!result.Succeeded)
+            _logger.LogWarning("Failed to create user {Email}: {Errors}",
+                user.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+        return result;
     }
 
     public async Task<IdentityResult> UpdateUserAsync(UserModel user)
-    {
-        return await _userManager.UpdateAsync(user);
-    }
+        => await _userManager.UpdateAsync(user);
 
     public async Task<IdentityResult> DeleteUserAsync(UserModel user)
-    {
-        return await _userManager.DeleteAsync(user);
-    }
+        => await _userManager.DeleteAsync(user);
 
-    // Role Management
+    // == Role Management =======================================================
+
     public async Task<IList<string>> GetUserRolesAsync(UserModel user)
-    {
-        return await _userManager.GetRolesAsync(user);
-    }
+        => await _userManager.GetRolesAsync(user);
 
     public async Task<IdentityResult> AddToRoleAsync(UserModel user, string role)
     {
@@ -69,44 +63,50 @@ public class AuthRepository : IAuthRepository
     }
 
     public async Task<IdentityResult> RemoveFromRoleAsync(UserModel user, string role)
-    {
-        return await _userManager.RemoveFromRoleAsync(user, role);
-    }
+        => await _userManager.RemoveFromRoleAsync(user, role);
 
     public async Task<bool> IsInRoleAsync(UserModel user, string role)
-    {
-        return await _userManager.IsInRoleAsync(user, role);
-    }
+        => await _userManager.IsInRoleAsync(user, role);
 
-    // Token Management
+    // == Token Management ======================================================
+
     public async Task<string> GenerateEmailConfirmationTokenAsync(UserModel user)
-    {
-        return await _userManager.GenerateEmailConfirmationTokenAsync(user);
-    }
+        => await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
     public async Task<string> GeneratePasswordResetTokenAsync(UserModel user)
-    {
-        return await _userManager.GeneratePasswordResetTokenAsync(user);
-    }
+        => await _userManager.GeneratePasswordResetTokenAsync(user);
 
     public async Task<IdentityResult> ConfirmEmailAsync(UserModel user, string token)
-    {
-        return await _userManager.ConfirmEmailAsync(user, token);
-    }
+        => await _userManager.ConfirmEmailAsync(user, token);
 
     public async Task<IdentityResult> ResetPasswordAsync(UserModel user, string token, string newPassword)
+        => await _userManager.ResetPasswordAsync(user, token, newPassword);
+
+    // == Refresh Token =========================================================
+
+    public async Task<UserModel?> GetUserByRefreshTokenAsync(string refreshToken)
+        => await _userManager.Users
+            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
+
+    public async Task SaveRefreshTokenAsync(UserModel user, string refreshToken, int expiryDays = 7)
     {
-        return await _userManager.ResetPasswordAsync(user, token, newPassword);
+        user.RefreshToken = refreshToken;
+        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(expiryDays);
+        await _userManager.UpdateAsync(user);
     }
 
-    // User Existence Checks
-    public async Task<bool> UserExistsByEmailAsync(string email)
+    public async Task RevokeRefreshTokenAsync(UserModel user)
     {
-        return await _userManager.Users.AnyAsync(u => u.Email == email);
+        user.RefreshToken = null;
+        user.RefreshTokenExpiryTime = DateTime.MinValue;
+        await _userManager.UpdateAsync(user);
     }
+
+    // == Existence Checks ======================================================
+
+    public async Task<bool> UserExistsByEmailAsync(string email)
+        => await _userManager.Users.AnyAsync(u => u.Email == email);
 
     public async Task<bool> UserExistsByUserNameAsync(string userName)
-    {
-        return await _userManager.Users.AnyAsync(u => u.UserName == userName);
-    }
+        => await _userManager.Users.AnyAsync(u => u.UserName == userName);
 }

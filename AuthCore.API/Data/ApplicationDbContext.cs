@@ -1,19 +1,26 @@
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.AspNetCore.Identity;
-using Microsoft.EntityFrameworkCore;
 using AuthCore.API.Models;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 
 namespace AuthCore.API.Data;
 
-public class ApplicationDbContext : IdentityDbContext<User> {
+public class ApplicationDbContext : IdentityDbContext<UserModel>
+{
     public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
-    protected override void OnModelCreating(ModelBuilder builder) {
+    protected override void OnModelCreating(ModelBuilder builder)
+    {
         base.OnModelCreating(builder);
 
-        // Make Email unique
-        builder.Entity<User>()
-                .HasIndex(u => u.Email)
-                .IsUnique();
+        // Configure UserModel extra columns
+        builder.Entity<UserModel>(entity =>
+        {
+            entity.Property(u => u.FirstName).IsRequired().HasMaxLength(50);
+            entity.Property(u => u.LastName).IsRequired().HasMaxLength(50);
+            entity.Property(u => u.ProfileURL).HasMaxLength(200);
+            entity.Property(u => u.Address).HasMaxLength(200);
+            entity.Property(u => u.RefreshToken).HasMaxLength(512);
+        });
     }
 }
