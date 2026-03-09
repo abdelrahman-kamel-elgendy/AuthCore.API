@@ -12,21 +12,13 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace AuthCore.API.Services;
 
-public class AuthService : IAuthService
+public class AuthService(IAuthRepository authRepository, IEmailService emailService,
+    IConfiguration configuration, ILogger<AuthService> logger) : IAuthService
 {
-    private readonly IAuthRepository _authRepository;
-    private readonly IEmailService _emailService;
-    private readonly IConfiguration _configuration;
-    private readonly ILogger<AuthService> _logger;
-
-    public AuthService(IAuthRepository authRepository, IEmailService emailService,
-        IConfiguration configuration, ILogger<AuthService> logger)
-    {
-        _authRepository = authRepository;
-        _emailService = emailService;
-        _configuration = configuration;
-        _logger = logger;
-    }
+    private readonly IAuthRepository _authRepository = authRepository;
+    private readonly IEmailService _emailService = emailService;
+    private readonly IConfiguration _configuration = configuration;
+    private readonly ILogger<AuthService> _logger = logger;
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {

@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using System.Net;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,11 +19,11 @@ var builder = WebApplication.CreateBuilder(args);
 DotNetEnv.Env.Load();
 builder.Configuration.AddEnvironmentVariables();
 
-// ── Controllers ───────────────────────────────────────────────────────────────
+// == Controllers ===============================================================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
-// ── Swagger ───────────────────────────────────────────────────────────────────
+// == Swagger ===================================================================
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
@@ -58,11 +59,11 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// ── Database ──────────────────────────────────────────────────────────────────
+// == Database ==================================================================
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
 
-// ── Identity ──────────────────────────────────────────────────────────────────
+// == Identity ==================================================================
 builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
 {
     // Password
@@ -87,7 +88,7 @@ builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
 builder.Services.Configure<DataProtectionTokenProviderOptions>(opt =>
     opt.TokenLifespan = TimeSpan.FromHours(2));
 
-// ── JWT Authentication ────────────────────────────────────────────────────────
+// == JWT Authentication ========================================================
 var jwtSettings = builder.Configuration.GetSection("JWT");
 var secretKey = jwtSettings["SecretKey"]
     ?? throw new InvalidOperationException("JWT SecretKey is not configured.");
@@ -112,16 +113,31 @@ builder.Services.AddAuthentication(options =>
         ValidateLifetime = true,
         ClockSkew = TimeSpan.Zero
     };
+    options.Events = new JwtBearerEvents
+    {
+        OnChallenge = async context =>
+        {
+            context.HandleResponse(); // suppress default response
+
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+
+            var message = context.AuthenticateFailure?.Message
+                       ?? "You are not authorized to access this resource.";
+
+            await context.Response.WriteAsJsonAsync(new ApiResponse<object>(HttpStatusCode.Unauthorized, false, message, null));
+        }
+    };
 });
 
-// ── Repositories & Services ───────────────────────────────────────────────────
+// == Repositories & Services ===================================================
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
-// ── Build ─────────────────────────────────────────────────────────────────────
+// == Build =====================================================================
 var app = builder.Build();
 
 // Global exception handler — must be first in the pipeline.
@@ -139,17 +155,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-// ── Migrate DB & Seed Roles on startup ────────────────────────────────────────
+// == Migrate DB & Seed Roles on startup ========================================
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>();
 
     await db.Database.MigrateAsync();
 
     foreach (var role in new[] { "Admin", "User" })
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));
+
+    // Always seed admin on every startup
+    await DbSeeder.SeedAsync(userManager, app.Configuration);
 }
 
 app.Run();

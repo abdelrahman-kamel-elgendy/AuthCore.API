@@ -33,7 +33,7 @@ AuthCore.API/
 ├── Controllers/
 │   ├── AuthController.cs              # Register, Login, Logout, Confirm, ForgotPassword, ResetPassword
 │   ├── UserController.cs              # GetProfile, UpdateProfile, ChangePassword
-│   └── AdminController.cs            # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
+│   └── AdminController.cs             # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
 │
 ├── Data/
 │   └── ApplicationDbContext.cs
@@ -59,7 +59,7 @@ AuthCore.API/
 │   ├── ForbiddenException.cs          # 403
 │   ├── NotFoundException.cs           # 404
 │   ├── UnauthorizedException.cs       # 401
-│   └── ValidationException.cs        # 400 + field errors
+│   └── ValidationException.cs         # 400 + field errors
 │
 ├── Middleware/
 │   └── ExceptionHandlingMiddleware.cs
