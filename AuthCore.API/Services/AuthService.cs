@@ -60,7 +60,7 @@ public class AuthService : IAuthService
         var encodedToken = Uri.EscapeDataString(await _authRepository.GenerateEmailConfirmationTokenAsync(user));
         var confirmUrl = $"{_configuration["AppBaseUrl"] ?? "http://localhost:5000"}/api/auth/confirm-email?userId={user.Id}&token={encodedToken}";
 
-        var body = EmailService.Render("ConfirmEmail.html", new Dictionary<string, string>
+        var body = EmailService.Render("../Templates/Email/ConfirmEmail.html", new Dictionary<string, string>
         {
             { "FirstName", user.FirstName },
             { "ConfirmUrl", confirmUrl },
@@ -76,6 +76,7 @@ public class AuthService : IAuthService
             UserName = user.UserName,
             Email = user.Email,
             FirstName = user.FirstName,
+            Token = encodedToken
         };
     }
 
@@ -93,7 +94,7 @@ public class AuthService : IAuthService
         var baseUrl = _configuration["AppBaseUrl"] ?? "http://localhost:5000";
         var roles = await _authRepository.GetUserRolesAsync(user);
 
-        var body = EmailService.Render("WelcomeEmail.html", new Dictionary<string, string>
+        var body = EmailService.Render("../Templates/Email/WelcomeEmail.html", new Dictionary<string, string>
         {
             { "FirstName", user.FirstName },
             { "UserName", user.UserName! },
@@ -123,7 +124,7 @@ public class AuthService : IAuthService
         var encodedToken = Uri.EscapeDataString(await _authRepository.GeneratePasswordResetTokenAsync(user));
         var resetUrl = $"{_configuration["AppBaseUrl"] ?? "http://localhost:5000"}/api/auth/reset-password?userId={user.Id}&token={encodedToken}";
 
-        var body = EmailService.Render("ResetPassword.html", new Dictionary<string, string>
+        var body = EmailService.Render("../Templates/Email/ResetPassword.html", new Dictionary<string, string>
         {
             { "FirstName", user.FirstName },
             { "ResetUrl", resetUrl },
@@ -206,7 +207,7 @@ public class AuthService : IAuthService
 
     public async Task<AuthResponseDto> LogoutAsync(string userId)
     {
-        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new UnauthorizedException();
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
 
         await _authRepository.RevokeRefreshTokenAsync(user);
 
