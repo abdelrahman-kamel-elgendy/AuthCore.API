@@ -55,7 +55,6 @@ public class ExceptionHandlingMiddleware
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
                 apiResponse.Status = HttpStatusCode.BadRequest;
                 apiResponse.Message = badRequestEx.Message;
-                apiResponse.Errors = new List<string> { badRequestEx.Details ?? badRequestEx.Message };
                 break;
 
             case NotFoundException notFoundEx:
@@ -80,7 +79,6 @@ public class ExceptionHandlingMiddleware
                 response.StatusCode = (int)HttpStatusCode.Conflict;
                 apiResponse.Status = HttpStatusCode.Conflict;
                 apiResponse.Message = conflictEx.Message;
-                apiResponse.Errors = new List<string> { conflictEx.Details ?? conflictEx.Message };
                 break;
 
             default:

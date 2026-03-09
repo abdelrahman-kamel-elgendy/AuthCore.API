@@ -26,8 +26,9 @@ public class AuthController : ControllerBase
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
-    public async Task<IActionResult> Register([FromBody] RegisterDto registerDto) => Ok(
-        new ApiResponse<AuthResponseDto>(
+    public async Task<IActionResult> Register([FromBody] RegisterDto registerDto) => StatusCode(
+        StatusCodes.Status201Created,
+        new ApiResponse<AuthResponseDto>(   
             HttpStatusCode.Created,
             true,
             "Registration successful. Please check your email for confirmation.",
@@ -79,4 +80,31 @@ public class AuthController : ControllerBase
             "Logged out successfully.",
             await _authService.LogoutAsync((User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)) ?? throw new UnauthorizedException())
         ));
+
+    [HttpPost("forgot-password")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto) => Ok(
+        new ApiResponse<object>(
+            HttpStatusCode.OK,
+            true,
+            "Reset link has been sent.",
+            await _authService.ForgotPasswordAsync(dto)
+        ));
+
+
+    [HttpPost("reset-password")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    {
+        await _authService.ResetPasswordAsync(dto);
+        return Ok(
+            new ApiResponse<object>(
+                HttpStatusCode.OK,
+                true,
+                "Password reset successfully. Please log in with your new password.",
+                null
+            ));
+    }
+
 }

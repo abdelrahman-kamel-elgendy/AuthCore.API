@@ -75,7 +75,6 @@ public class AuthService : IAuthService
             UserId = user.Id,
             UserName = user.UserName,
             Email = user.Email,
-            FirstName = user.FirstName,
             Token = encodedToken
         };
     }
@@ -114,9 +113,9 @@ public class AuthService : IAuthService
         };
     }
 
-    public async Task ForgotPasswordAsync(ForgotPasswordDto dto)
+    public async Task<AuthResponseDto> ForgotPasswordAsync(ForgotPasswordDto dto)
     {
-        var user = await _authRepository.GetUserByEmailAsync(dto.Email) ?? throw new BadRequestException("Email is required!");
+        var user = await _authRepository.GetUserByEmailAsync(dto.Email) ?? throw new NotFoundException("user", dto.Email);
 
         if (!user.EmailConfirmed)
             throw new BadRequestException("Email not confirmed!");
@@ -133,13 +132,19 @@ public class AuthService : IAuthService
 
         await _emailService.SendEmailAsync(user.Email!, "Reset your AuthCore password", body);
         _logger.LogInformation("Password reset requested for: {Email}", user.Email);
+
+        return new AuthResponseDto
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            Token = encodedToken
+        };
     }
 
     public async Task ResetPasswordAsync(ResetPasswordDto dto)
     {
         var user = await _authRepository.GetUserByIdAsync(dto.UserId) ?? throw new NotFoundException("User", dto.UserId);
-
-        var result = await _authRepository.ResetPasswordAsync(user, dto.Token, dto.Password);
+        var result = await _authRepository.ResetPasswordAsync(user, Uri.UnescapeDataString(dto.Token), dto.Password);
         if (!result.Succeeded)
             throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
 
