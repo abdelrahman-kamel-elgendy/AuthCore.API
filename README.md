@@ -86,13 +86,11 @@ AuthCore.API/
 │   │   ├── IAdminService.cs
 │   │   ├── IAuthService.cs
 │   │   ├── IEmailService.cs
-│   │   ├── ITokenBlacklistService.cs
 │   │   └── IUserService.cs
 │   ├── AdminService.cs
 │   ├── AuthService.cs
 │   ├── EmailService.cs
-│   ├── EmailTemplateService.cs
-│   └── TokenBlacklistService.cs       # Stores/checks revoked JWT jti claims
+│   └── EmailTemplateService.cs
 │
 ├── Templates/
 │   └── Email/
