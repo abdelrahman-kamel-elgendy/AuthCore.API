@@ -117,6 +117,8 @@ builder.Services.AddAuthentication(options =>
 // ── Repositories & Services ───────────────────────────────────────────────────
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAdminService, AdminService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 
 // ── Build ─────────────────────────────────────────────────────────────────────

@@ -4,9 +4,11 @@ namespace AuthCore.API.Services.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponseDto> RegisterAsync(RegisterDto registerDto);
-    Task<AuthResponseDto> LoginAsync(LoginDto loginDto);
-    Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto refreshTokenDto);
-    Task LogoutAsync(string userId);
-    Task<AuthResponseDto> ConfirmEmailAsync(ConfirmEmailDto confirmEmailDto);
+    Task<AuthResponseDto> RegisterAsync(RegisterDto dto);
+    Task<AuthResponseDto> LoginAsync(LoginDto dto);
+    Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto dto);
+    Task<AuthResponseDto> LogoutAsync(string id);
+    Task<AuthResponseDto> ConfirmEmailAsync(ConfirmEmailDto dto);
+    Task ForgotPasswordAsync(ForgotPasswordDto dto);
+    Task ResetPasswordAsync(ResetPasswordDto dto);
 }

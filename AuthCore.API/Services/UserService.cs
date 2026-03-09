@@ -1,0 +1,96 @@
+using AuthCore.API.DTOs;
+using AuthCore.API.DTOs.Auth;
+using AuthCore.API.DTOs.User;
+using AuthCore.API.Exceptions;
+using AuthCore.API.Repositories;
+using AuthCore.API.Services.Interfaces;
+
+namespace AuthCore.API.Services;
+
+public class UserService : IUserService
+{
+    private readonly IAuthRepository _authRepository;
+    private readonly ILogger<UserService> _logger;
+
+    public UserService(IAuthRepository authRepository, ILogger<UserService> logger)
+    {
+        _authRepository = authRepository;
+        _logger = logger;
+    }
+
+    public async Task<UserDto> GetProfileAsync(string userId)
+    {
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
+        var roles = await _authRepository.GetUserRolesAsync(user);
+
+        return new UserDto
+        {
+            Id = user.Id,
+            UserName = user.UserName!,
+            Email = user.Email!,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            PhoneNumber = user.PhoneNumber,
+            ProfileURL = user.ProfileURL,
+            Address = user.Address,
+            BirthDate = user.BirthDate,
+            EmailConfirmed = user.EmailConfirmed,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt,
+            Roles = [.. roles]
+        };
+    }
+
+    public async Task<UserDto> UpdateProfileAsync(string userId, UpdateProfileDto dto)
+    {
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
+
+        if (dto.FirstName is not null)
+            user.FirstName = dto.FirstName;
+        if (dto.LastName is not null)
+            user.LastName = dto.LastName;
+        if (dto.PhoneNumber is not null)
+            user.PhoneNumber = dto.PhoneNumber;
+        if (dto.Address is not null)
+            user.Address = dto.Address;
+        if (dto.ProfileURL is not null)
+            user.ProfileURL = dto.ProfileURL;
+        if (dto.BirthDate is not null)
+            user.BirthDate = dto.BirthDate;
+
+        user.UpdatedAt = DateTime.UtcNow;
+
+        var result = await _authRepository.UpdateUserAsync(user);
+        if (!result.Succeeded)
+            throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
+
+        _logger.LogInformation("Profile updated for: {UserId}", userId);
+
+        return await GetProfileAsync(userId);
+    }
+
+    public async Task<AuthResponseDto> ChangePasswordAsync(string userId, ChangePasswordDto dto)
+    {
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("User", userId);
+
+        if (!await _authRepository.CheckPasswordAsync(user, dto.CurrentPassword))
+            throw new BadRequestException("Current password is incorrect.");
+
+        var resetToken = await _authRepository.GeneratePasswordResetTokenAsync(user);
+        var result = await _authRepository.ResetPasswordAsync(user, resetToken, dto.Password);
+
+        if (!result.Succeeded)
+            throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
+
+        await _authRepository.RevokeRefreshTokenAsync(user);
+
+        _logger.LogInformation("Password changed for: {UserId}", userId);
+
+        return new AuthResponseDto
+        {
+            UserId = user.Id,
+            Email = user.Email,
+            UserName = user.UserName
+        };
+    }
+}
