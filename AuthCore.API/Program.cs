@@ -13,13 +13,16 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Load .env into environment variables before anything reads config
+// Load .env file into environment variables before anything reads configuration.
+// In production, set real environment variables instead of using a .env file.
 DotNetEnv.Env.Load();
 builder.Configuration.AddEnvironmentVariables();
 
+// ── Controllers ───────────────────────────────────────────────────────────────
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
+// ── Swagger ───────────────────────────────────────────────────────────────────
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo
@@ -28,6 +31,7 @@ builder.Services.AddSwaggerGen(options =>
         Version = "v1",
         Description = "JWT-based authentication API built with ASP.NET Core 8 and PostgreSQL."
     });
+
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "Enter 'Bearer {your_token}'",
@@ -37,31 +41,43 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT"
     });
+
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
             new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id   = "Bearer"
+                }
             },
             Array.Empty<string>()
         }
     });
 });
 
+// ── Database ──────────────────────────────────────────────────────────────────
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
 
+// ── Identity ──────────────────────────────────────────────────────────────────
 builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
 {
+    // Password
     options.Password.RequireDigit = true;
     options.Password.RequiredLength = 8;
     options.Password.RequireNonAlphanumeric = true;
     options.Password.RequireUppercase = true;
     options.Password.RequireLowercase = true;
+
+    // Lockout
     options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
     options.Lockout.MaxFailedAccessAttempts = 5;
     options.Lockout.AllowedForNewUsers = true;
+
+    // User
     options.User.RequireUniqueEmail = true;
     options.SignIn.RequireConfirmedEmail = true;
 })
@@ -71,6 +87,7 @@ builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
 builder.Services.Configure<DataProtectionTokenProviderOptions>(opt =>
     opt.TokenLifespan = TimeSpan.FromHours(2));
 
+// ── JWT Authentication ────────────────────────────────────────────────────────
 var jwtSettings = builder.Configuration.GetSection("JWT");
 var secretKey = jwtSettings["SecretKey"]
     ?? throw new InvalidOperationException("JWT SecretKey is not configured.");
@@ -82,7 +99,7 @@ builder.Services.AddAuthentication(options =>
 })
 .AddJwtBearer(options =>
 {
-    options.RequireHttpsMetadata = false;
+    options.RequireHttpsMetadata = false; // set true in production
     options.SaveToken = true;
     options.TokenValidationParameters = new TokenValidationParameters
     {
@@ -97,11 +114,15 @@ builder.Services.AddAuthentication(options =>
     };
 });
 
+// ── Repositories & Services ───────────────────────────────────────────────────
 builder.Services.AddScoped<IAuthRepository, AuthRepository>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
 
+// ── Build ─────────────────────────────────────────────────────────────────────
 var app = builder.Build();
 
+// Global exception handler — must be first in the pipeline.
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
@@ -116,11 +137,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
+// ── Migrate DB & Seed Roles on startup ────────────────────────────────────────
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+
     await db.Database.MigrateAsync();
+
     foreach (var role in new[] { "Admin", "User" })
         if (!await roleManager.RoleExistsAsync(role))
             await roleManager.CreateAsync(new IdentityRole(role));

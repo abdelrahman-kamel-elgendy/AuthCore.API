@@ -20,7 +20,7 @@ public class AuthRepository : IAuthRepository
         _logger = logger;
     }
 
-    // == User Management =======================================================
+    // ── User Management ───────────────────────────────────────────────────────
 
     public async Task<UserModel?> GetUserByIdAsync(string userId)
         => await _userManager.FindByIdAsync(userId);
@@ -38,18 +38,17 @@ public class AuthRepository : IAuthRepository
     {
         var result = await _userManager.CreateAsync(user, password);
         if (!result.Succeeded)
-            _logger.LogWarning("Failed to create user {Email}: {Errors}",
-                user.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+            _logger.LogWarning("Failed to create user {Email}: {Errors}", user.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
+       
         return result;
     }
 
-    public async Task<IdentityResult> UpdateUserAsync(UserModel user)
-        => await _userManager.UpdateAsync(user);
+    public async Task<IdentityResult> UpdateUserAsync(UserModel user) => await _userManager.UpdateAsync(user);
 
     public async Task<IdentityResult> DeleteUserAsync(UserModel user)
         => await _userManager.DeleteAsync(user);
 
-    // == Role Management =======================================================
+    // ── Role Management ───────────────────────────────────────────────────────
 
     public async Task<IList<string>> GetUserRolesAsync(UserModel user)
         => await _userManager.GetRolesAsync(user);
@@ -68,8 +67,6 @@ public class AuthRepository : IAuthRepository
     public async Task<bool> IsInRoleAsync(UserModel user, string role)
         => await _userManager.IsInRoleAsync(user, role);
 
-    // == Token Management ======================================================
-
     public async Task<string> GenerateEmailConfirmationTokenAsync(UserModel user)
         => await _userManager.GenerateEmailConfirmationTokenAsync(user);
 
@@ -81,8 +78,6 @@ public class AuthRepository : IAuthRepository
 
     public async Task<IdentityResult> ResetPasswordAsync(UserModel user, string token, string newPassword)
         => await _userManager.ResetPasswordAsync(user, token, newPassword);
-
-    // == Refresh Token =========================================================
 
     public async Task<UserModel?> GetUserByRefreshTokenAsync(string refreshToken)
         => await _userManager.Users
@@ -101,8 +96,6 @@ public class AuthRepository : IAuthRepository
         user.RefreshTokenExpiryTime = DateTime.MinValue;
         await _userManager.UpdateAsync(user);
     }
-
-    // == Existence Checks ======================================================
 
     public async Task<bool> UserExistsByEmailAsync(string email)
         => await _userManager.Users.AnyAsync(u => u.Email == email);

@@ -40,45 +40,52 @@ public class ExceptionHandlingMiddleware
         var response = context.Response;
         response.ContentType = "application/json";
 
-        var apiResponse = new ApiResponse<object> { Success = false };
+        var apiResponse = new ApiResponse<object>(false);
 
         switch (exception)
         {
             case Exceptions.ValidationException validationEx:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
+                apiResponse.Status = HttpStatusCode.BadRequest;
                 apiResponse.Message = validationEx.Message;
                 apiResponse.ValidationErrors = validationEx.Errors;
                 break;
 
             case BadRequestException badRequestEx:
                 response.StatusCode = (int)HttpStatusCode.BadRequest;
+                apiResponse.Status = HttpStatusCode.BadRequest;
                 apiResponse.Message = badRequestEx.Message;
                 apiResponse.Errors = new List<string> { badRequestEx.Details ?? badRequestEx.Message };
                 break;
 
             case NotFoundException notFoundEx:
                 response.StatusCode = (int)HttpStatusCode.NotFound;
+                apiResponse.Status = HttpStatusCode.NotFound;
                 apiResponse.Message = notFoundEx.Message;
                 break;
 
             case UnauthorizedException unauthorizedEx:
                 response.StatusCode = (int)HttpStatusCode.Unauthorized;
+                apiResponse.Status = HttpStatusCode.Unauthorized;
                 apiResponse.Message = unauthorizedEx.Message;
                 break;
 
             case ForbiddenException forbiddenEx:
                 response.StatusCode = (int)HttpStatusCode.Forbidden;
+                apiResponse.Status = HttpStatusCode.Forbidden;
                 apiResponse.Message = forbiddenEx.Message;
                 break;
 
             case ConflictException conflictEx:
                 response.StatusCode = (int)HttpStatusCode.Conflict;
+                apiResponse.Status = HttpStatusCode.Conflict;
                 apiResponse.Message = conflictEx.Message;
                 apiResponse.Errors = new List<string> { conflictEx.Details ?? conflictEx.Message };
                 break;
 
             default:
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;
+                apiResponse.Status = HttpStatusCode.InternalServerError;
                 apiResponse.Message = "An internal server error occurred. Please try again later.";
 
                 // Only expose stack trace in development

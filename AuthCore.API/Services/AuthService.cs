@@ -2,12 +2,12 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using AuthCore.API.DTOs;
 using AuthCore.API.DTOs.Auth;
 using AuthCore.API.Exceptions;
 using AuthCore.API.Models;
 using AuthCore.API.Repositories;
 using AuthCore.API.Services.Interfaces;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 
 namespace AuthCore.API.Services;
@@ -27,8 +27,6 @@ public class AuthService : IAuthService
         _configuration = configuration;
         _logger = logger;
     }
-
-    // ── Register ──────────────────────────────────────────────────────────────
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
@@ -54,26 +52,41 @@ public class AuthService : IAuthService
             IsActive = true
         };
 
-        // Throw a ValidationException if Identity rejects the user (e.g. weak password)
-        var result = await _authRepository.CreateUserAsync(user, dto.Password);
-        if (!result.Succeeded)
-        {
-            var errors = result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description });
-            throw new ValidationException(errors);
-        }
-
+        await _authRepository.CreateUserAsync(user, dto.Password);
         await _authRepository.AddToRoleAsync(user, "User");
 
         _logger.LogInformation("New user registered: {Email}", user.Email);
 
         return new AuthResponseDto
         {
-            IsSuccess = true,
-            Message = "Registration successful. Please check your email for confirmation."
+            Token = Uri.EscapeDataString(await _authRepository.GenerateEmailConfirmationTokenAsync(user)),
+            UserId = user.Id,
+            Email = user.Email,
+            FirstName = user.FirstName
         };
     }
 
-    // ── Login ─────────────────────────────────────────────────────────────────
+    public async Task<AuthResponseDto> ConfirmEmailAsync(ConfirmEmailDto dto)
+    {
+        var user = await _authRepository.GetUserByIdAsync(dto.UserId)
+            ?? throw new NotFoundException("User", dto.UserId);
+
+        if (user.EmailConfirmed)
+            throw new BadRequestException("Email is already confirmed.");
+
+        var result = await _authRepository.ConfirmEmailAsync(user, dto.Token);
+        if (!result.Succeeded)
+            throw new BadRequestException("Invalid or expired confirmation token.");
+
+        _logger.LogInformation("Email confirmed for: {Email}", user.Email);
+
+        return new AuthResponseDto
+        {
+            Email = user.Email,
+            UserName = user.UserName,
+            FirstName = user.FirstName
+        };
+    }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
     {
@@ -99,19 +112,15 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto
         {
-            IsSuccess = true,
-            Message = "Login successful.",
             Token = new JwtSecurityTokenHandler().WriteToken(accessToken),
             RefreshToken = refreshToken,
             Expiration = accessToken.ValidTo,
             UserId = user.Id,
             UserName = user.UserName,
             Email = user.Email,
-            Roles = roles.ToList()
+            Roles = [.. roles]
         };
     }
-
-    // ── Refresh Token ─────────────────────────────────────────────────────────
 
     public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto dto)
     {
@@ -134,30 +143,24 @@ public class AuthService : IAuthService
 
         return new AuthResponseDto
         {
-            IsSuccess = true,
-            Message = "Token refreshed successfully.",
             Token = new JwtSecurityTokenHandler().WriteToken(newAccessToken),
             RefreshToken = newRefreshToken,
             Expiration = newAccessToken.ValidTo,
             UserId = user.Id,
             UserName = user.UserName,
             Email = user.Email,
-            Roles = roles.ToList()
+            Roles = [.. roles]
         };
     }
 
-    // ── Logout ────────────────────────────────────────────────────────────────
-
     public async Task LogoutAsync(string userId)
     {
-        var user = await _authRepository.GetUserByIdAsync(userId);
-        if (user is null) return;
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new UnauthorizedException();
 
         await _authRepository.RevokeRefreshTokenAsync(user);
         _logger.LogInformation("User logged out: {UserId}", userId);
-    }
+    }   
 
-    // ── Private Helpers ───────────────────────────────────────────────────────
 
     private JwtSecurityToken GenerateAccessToken(UserModel user, IList<string> roles)
     {
@@ -169,10 +172,10 @@ public class AuthService : IAuthService
 
         var claims = new List<Claim>
         {
-            new(JwtRegisteredClaimNames.Sub,   user.Id),
+            new(JwtRegisteredClaimNames.Sub, user.Id),
             new(JwtRegisteredClaimNames.Email, user.Email!),
-            new(JwtRegisteredClaimNames.Name,  user.UserName!),
-            new(JwtRegisteredClaimNames.Jti,   Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Name, user.UserName!),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new("is_active", user.IsActive.ToString())
         };
 

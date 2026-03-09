@@ -5,6 +5,9 @@ using AuthCore.API.Services.Interfaces;
 using System.IdentityModel.Tokens.Jwt;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AuthCore.API.Services;
+using AuthCore.API.Exceptions;
+using System.Net;
 
 namespace AuthCore.API.Controllers;
 
@@ -13,15 +16,18 @@ namespace AuthCore.API.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IEmailService _emailService;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<AuthController> _logger;
 
-    public AuthController(IAuthService authService, ILogger<AuthController> logger)
+    public AuthController(IAuthService authService, IEmailService emailService, IConfiguration configuration, ILogger<AuthController> logger)
     {
         _authService = authService;
+        _emailService = emailService;
+        _configuration = configuration;
         _logger = logger;
     }
 
-    // Register a new user account.
     [HttpPost("register")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
@@ -29,41 +35,94 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Register([FromBody] RegisterDto registerDto)
     {
         var result = await _authService.RegisterAsync(registerDto);
-        return Ok(ApiResponse<AuthResponseDto>.Ok(result, result.Message));
+
+        await _emailService.SendEmailAsync(
+            result.Email!,
+            "Confirm your AuthCore account",
+            EmailService.Render("../Templates/Email/ConfirmEmail.html", new() {
+                    { "FirstName", result.FirstName ?? throw new BadRequestException("No name to send email!")},
+                    { "ConfirmUrl", $"{_configuration["AppBaseUrl"] ?? "http://localhost:5000"}/api/auth/confirm-email?userId={result.UserId}&token={result.Token}"},
+                    { "Year", DateTime.UtcNow.Year.ToString()}
+            })
+        );
+
+        return Ok(new ApiResponse<AuthResponseDto>(
+            HttpStatusCode.Created,
+            true,
+            "Registration successful. Please check your email for confirmation.",
+            result
+        ));
     }
 
-    // Login and receive an access token + refresh token.
+    [HttpGet("confirm-email")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token)
+    {
+        var result = await _authService.ConfirmEmailAsync(new ConfirmEmailDto { UserId = userId, Token = token });
+
+        string loginUrl = $"{_configuration["AppBaseUrl"] ?? "http://localhost:5000"}/login";
+        await _emailService.SendEmailAsync(
+            result.Email!,
+            "Confirm your AuthCore account",
+            EmailService.Render("../Templates/Email/WelcomeEmail.html", new() {
+                { "FirstName", result.FirstName ?? throw new BadRequestException("No name to send email!") },
+                { "UserName", result.UserName! },
+                { "Email", result.Email! },
+                { "LoginUrl", loginUrl},
+                { "Year", DateTime.UtcNow.Year.ToString() }
+            }));
+
+        return Ok(new ApiResponse<object>(
+            HttpStatusCode.OK,
+            true,
+            "Email confirmed successfully.You can now log in.",
+            new { LoginUrl = loginUrl, UserEmail = result.Email, Name = result.FirstName }
+        ));
+    }
+
     [HttpPost("login")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto)
     {
-        var result = await _authService.LoginAsync(loginDto);
-        return Ok(ApiResponse<AuthResponseDto>.Ok(result, result.Message));
+        return Ok(new ApiResponse<AuthResponseDto>(
+            HttpStatusCode.OK,
+            true,
+            "Login successful.",
+            await _authService.LoginAsync(loginDto)
+        ));
     }
 
-    // Exchange a valid refresh token for a new access + refresh token pair.
     [HttpPost("refresh-token")]
     [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto)
     {
-        var result = await _authService.RefreshTokenAsync(refreshTokenDto);
-        return Ok(ApiResponse<AuthResponseDto>.Ok(result, result.Message));
+        return Ok(new ApiResponse<AuthResponseDto>(
+            HttpStatusCode.OK,
+            true,
+            "Token refreshed successfully.",
+            await _authService.RefreshTokenAsync(refreshTokenDto)
+        ));
     }
 
-    // Revoke the current refresh token (server-side logout).
     [Authorize]
     [HttpPost("logout")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout()
     {
-        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub);
+        var userId = (User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)) ?? throw new UnauthorizedException();
 
-        if (userId is not null)
-            await _authService.LogoutAsync(userId);
+        await _authService.LogoutAsync(userId);
 
-        return Ok(ApiResponse<object>.Ok("Logged out successfully."));
+        return Ok(new ApiResponse<object>(
+            HttpStatusCode.OK,
+            true,
+            "Logged out successfully.",
+            null
+        ));
     }
 }

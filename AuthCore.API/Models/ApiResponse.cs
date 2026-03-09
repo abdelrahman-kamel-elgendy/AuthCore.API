@@ -1,11 +1,15 @@
+using System.Net;
 using System.Text.Json.Serialization;
 
 namespace AuthCore.API.Models;
 
 public class ApiResponse<T>
 {
+    public HttpStatusCode Status { get; set; }
     public bool Success { get; set; }
     public string? Message { get; set; }
+    
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public T? Data { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -14,30 +18,13 @@ public class ApiResponse<T>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IDictionary<string, string[]>? ValidationErrors { get; set; }
 
-    public static ApiResponse<T> Ok(T data, string? message = null) => new()
-    {
-        Success = true,
-        Data = data,
-        Message = message
-    };
+    public ApiResponse(bool success) => Success = success;
 
-    public static ApiResponse<T> Ok(string? message = null) => new()
+    public ApiResponse(HttpStatusCode status, bool success, string? message, T? data)
     {
-        Success = true,
-        Message = message
-    };
-
-    public static ApiResponse<T> Fail(string message, List<string>? errors = null) => new()
-    {
-        Success = false,
-        Message = message,
-        Errors = errors
-    };
-
-    public static ApiResponse<T> Fail(string message, IDictionary<string, string[]> validationErrors) => new()
-    {
-        Success = false,
-        Message = message,
-        ValidationErrors = validationErrors
-    };
+        Success = success;
+        Status = status;
+        Message = message;
+        Data = data;
+    }
 }
