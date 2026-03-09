@@ -262,24 +262,27 @@ var app = builder.Build();
 // 1. Global exception handler — must be outermost to catch everything
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// 2. Forwarded headers — must resolve real IP before rate limiter reads it
+// 2. Security headers — applied to every response
+app.UseMiddleware<SecurityHeadersMiddleware>();
+
+// 3. Forwarded headers — must resolve real IP before rate limiter reads it
 app.UseForwardedHeaders();
 
-// 3. Rate limiting — applied before auth so all requests are covered
+// 4. Rate limiting — applied before auth so all requests are covered
 app.UseRateLimiter();
 
-// 4. HTTPS redirect — skipped in development
+// 5. HTTPS redirect — skipped in development
 if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 
-// 5. Swagger — development only
+// 6. Swagger — development only
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AuthCore API v1"));
 }
 
-// 6. Auth
+// 7. Auth
 app.UseAuthentication();
 app.UseAuthorization();
 

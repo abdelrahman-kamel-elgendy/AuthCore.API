@@ -3,7 +3,6 @@
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![JWT](https://img.shields.io/badge/Auth-JWT-orange)](https://jwt.io)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle — registration, email confirmation, login, JWT + refresh token rotation, token blacklisting on logout, password management, user profiles, and admin controls.
 
@@ -15,6 +14,7 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 - **Refresh Token Rotation** — cryptographically random 64-byte tokens, rotated on every use, expire after 7 days
 - **Token Blacklist** — revoked access tokens are stored in DB and rejected on every request via `OnTokenValidated`; re-using a token after logout returns `401`
 - **Rate Limiting** — per-IP fixed-window limits on all auth endpoints; consistent `429` JSON response with `Retry-After` header
+- **Security Headers** — every response includes `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` via a dedicated middleware
 - **Email Confirmation** — required before login; sends branded HTML email on register
 - **Welcome Email** — sent automatically after email is confirmed
 - **Forgot / Reset Password** — secure reset flow via email link; revokes all refresh tokens on reset
@@ -59,7 +59,7 @@ AuthCore.API/
 │   │   ├── UserDto.cs
 │   │   ├── ChangePasswordDto.cs
 │   │   └── UpdateProfileDto.cs
-│   ├──  Email/
+│   ├── Email/
 │   |   └── ConfirmEmailDto.cs
 │   └── DataValidation.cs
 │
@@ -73,13 +73,13 @@ AuthCore.API/
 │   └── ValidationException.cs         # 400 + field errors
 │
 ├── Middleware/
-│   └── ExceptionHandlingMiddleware.cs
+│   ├── ExceptionHandlingMiddleware.cs # Handle exceptions and returns api response errors
+│   └── SecurityHeadersMiddleware.cs   # Injects security headers on every response
 │
 ├── Models/
 │   ├── ApiResponse.cs
 │   ├── PagedList.cs
 │   ├── PaginationMetadata.cs
-│   ├── RevokedToken.cs                # Token blacklist entry
 │   └── UserModel.cs
 │
 ├── Repositories/
@@ -97,11 +97,11 @@ AuthCore.API/
 │   ├── EmailService.cs
 │   └── EmailTemplateService.cs
 │
-├── Configs/                          # Strongly-typed configuration classes
-│   ├── AppConfigs.cs                 # App__BaseUrl
-│   ├── JwtConfigs.cs                 # JWT__SecretKey, Issuer, Audience, expiry
-│   ├── SmtpConfigs.cs                # Smtp__Host, Port, credentials, SSL
-│   └── SeedConfigs.cs                # Seed__Admin__* values
+├── Configs/                           # Strongly-typed configuration classes
+│   ├── AppConfigs.cs                  # App__BaseUrl
+│   ├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
+│   ├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
+│   └── SeedConfigs.cs                 # Seed__Admin__* values
 │
 ├── Templates/
 │   └── Email/
@@ -376,6 +376,26 @@ The rate limiter reads `X-Forwarded-For` first so it correctly identifies real c
 
 ---
 
+## Security Headers
+
+Every response includes a set of HTTP security headers injected by `SecurityHeadersMiddleware`. No client configuration is required — they are applied automatically at the middleware level.
+
+| Header | Value | Protects Against |
+|---|---|---|
+| `X-Content-Type-Options` | `nosniff` | MIME-type confusion attacks |
+| `X-Frame-Options` | `DENY` | Clickjacking via iframes |
+| `X-XSS-Protection` | `1; mode=block` | XSS in legacy browsers |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Referrer info leakage |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` | Unwanted browser feature access |
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | SSL stripping, HTTPS downgrade attacks |
+| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | XSS, data injection, framing |
+
+> `Strict-Transport-Security` is only sent over HTTPS and is intentionally omitted on plain HTTP to avoid breaking local development.
+>
+> The `Content-Security-Policy` is relaxed automatically for `/swagger` routes in development to allow Swagger UI assets to load correctly.
+
+---
+
 ## Token Blacklist
 
 On logout, the JWT's `jti` claim and expiry are stored in the `RevokedTokens` table. Every subsequent authenticated request checks this table via `OnTokenValidated` in the JWT middleware. If the `jti` is found, the request is rejected with `401` before reaching the controller. Expired entries can be purged anytime via `TokenBlacklistService.PurgeExpiredAsync()`.
@@ -425,6 +445,7 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 | Refresh token | 64 random bytes · 7 days · rotated on every use |
 | Token blacklist | `jti` stored in DB on logout, checked on every request |
 | Rate limiting | Per-IP fixed-window on auth endpoints; `429` + `Retry-After` |
+| Security headers | `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` on every response |
 | HTTPS | Enforced in non-development environments |
 | Proxy support | `X-Forwarded-For` / `X-Forwarded-Proto` via `ForwardedHeaders` middleware |
 | User enumeration | Login and forgot-password always return the same message |
