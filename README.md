@@ -14,6 +14,7 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 - **JWT Authentication** — short-lived access tokens (1 hour), signed with HS256
 - **Refresh Token Rotation** — cryptographically random 64-byte tokens, rotated on every use, expire after 7 days
 - **Token Blacklist** — revoked access tokens are stored in DB and rejected on every request via `OnTokenValidated`; re-using a token after logout returns `401`
+- **Rate Limiting** — per-IP fixed-window limits on all auth endpoints; consistent `429` JSON response with `Retry-After` header
 - **Email Confirmation** — required before login; sends branded HTML email on register
 - **Welcome Email** — sent automatically after email is confirmed
 - **Forgot / Reset Password** — secure reset flow via email link; revokes all refresh tokens on reset
@@ -22,6 +23,7 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 - **Admin Panel** — paginated user list, promote/demote, activate/deactivate, delete
 - **Global Exception Handling** — middleware maps every exception type to a consistent JSON response
 - **Consistent 401 Response Body** — unauthorized requests always return `ApiResponse<T>` JSON, never a blank response
+- **Strongly-Typed Configs** — all `.env` variables are bound to validated Configs classes; app refuses to start if any required value is missing
 - **Environment Secrets** — all secrets in `.env` via `DotNetEnv`, never committed to git
 - **HTML Email Templates** — dark-themed, table-based templates for all transactional emails
 - **Database Seeding** — admin account seeded on every startup; 20 test users seeded via data migration
@@ -40,7 +42,7 @@ AuthCore.API/
 │
 ├── Data/
 │   ├── ApplicationDbContext.cs
-│   ├── DbSeeder.cs                    # Admin seeder — runs on every startup
+│   ├── DbSeeder.cs                    # Admin seeder — runs on every startup (accepts SeedConfigs)
 │   └── Migrations/
 │       └── SeedTestUsers.cs           # 20 test users — run once via dotnet ef database update
 │
@@ -49,14 +51,17 @@ AuthCore.API/
 │   │   ├── AuthResponseDto.cs
 │   │   ├── ConfirmEmailDto.cs
 │   │   ├── ForgotPasswordDto.cs
+│   |   ├── LoginDto.cs
 │   │   ├── RefreshTokenDto.cs
+│   |   ├── RegisterDto.cs
 │   │   └── ResetPasswordDto.cs
 │   ├── User/
+│   │   ├── UserDto.cs
 │   │   ├── ChangePasswordDto.cs
 │   │   └── UpdateProfileDto.cs
-│   ├── LoginDto.cs
-│   ├── RegisterDto.cs
-│   └── UserDto.cs
+│   ├──  Email/
+│   |   └── ConfirmEmailDto.cs
+│   └── DataValidation.cs
 │
 ├── Exceptions/
 │   ├── ApiException.cs                # Abstract base
@@ -92,6 +97,12 @@ AuthCore.API/
 │   ├── EmailService.cs
 │   └── EmailTemplateService.cs
 │
+├── Configs/                          # Strongly-typed configuration classes
+│   ├── AppConfigs.cs                 # App__BaseUrl
+│   ├── JwtConfigs.cs                 # JWT__SecretKey, Issuer, Audience, expiry
+│   ├── SmtpConfigs.cs                # Smtp__Host, Port, credentials, SSL
+│   └── SeedConfigs.cs                # Seed__Admin__* values
+│
 ├── Templates/
 │   └── Email/
 │       ├── ConfirmEmail.html          # Sent on register
@@ -100,7 +111,6 @@ AuthCore.API/
 │
 ├── .env                               # ⚠️ Secrets — gitignored
 ├── .env.example                       # ✅ Template — safe to commit
-├── appsettings.json
 ├── AuthCore.API.csproj
 └── Program.cs
 ```
@@ -132,19 +142,28 @@ cp .env.example .env
 Fill in your values:
 
 ```env
+# Database
 ConnectionStrings__PostgreSQL=Host=localhost;Database=AuthCoreDB;Username=postgres;Password=YOUR_PASSWORD
+
+# JWT
 JWT__ValidIssuer=http://localhost:5000
 JWT__ValidAudience=http://localhost:4200
 JWT__SecretKey=AT_LEAST_32_CHARS_LONG_RANDOM_SECRET!@#$%
+JWT__AccessTokenExpiryMinutes=60
+JWT__RefreshTokenExpiryDays=7
 
-AppBaseUrl=http://localhost:5000
+# App
+App__BaseUrl=http://localhost:5000
 
+# SMTP
 Smtp__Host=smtp.gmail.com
 Smtp__Port=587
 Smtp__Username=your@gmail.com
 Smtp__Password=your_app_password
 Smtp__FromName=AuthCore
+Smtp__EnableSsl=true
 
+# Seed
 Seed__Admin__Email=admin@authcore.com
 Seed__Admin__Password=Admin@123456
 Seed__Admin__FirstName=Super
@@ -152,7 +171,9 @@ Seed__Admin__LastName=Admin
 Seed__Admin__UserName=superadmin
 ```
 
-> `.env` is gitignored and will never be committed. In production, set these as real environment variables on your server or container.
+> `.env` is gitignored and will never be committed. All variables are validated at startup — the app will refuse to start with a clear error if any required value is missing or invalid.
+>
+> In production, set these as real environment variables on your server or container instead of using a `.env` file.
 
 ### 3 — Generate password hash for test users
 
@@ -185,15 +206,15 @@ Open **http://localhost:5000/swagger** 🎉
 
 ### Auth — `api/auth`
 
-| Method | Route | Auth | Description |
-|---|---|---|---|
-| `POST` | `/register` | — | Register new account, sends confirmation email |
-| `GET` | `/confirm-email?userId=&token=` | — | Confirm email via link, sends welcome email |
-| `POST` | `/login` | — | Login, returns access + refresh token |
-| `POST` | `/refresh-token` | — | Rotate refresh token |
-| `POST` | `/logout` | Bearer | Blacklist access token + revoke refresh token |
-| `POST` | `/forgot-password` | — | Send password reset link (always returns 200) |
-| `POST` | `/reset-password` | — | Reset password, revokes all refresh tokens |
+| Method | Route | Auth | Rate Limit | Description |
+|---|---|---|---|---|
+| `POST` | `/register` | — | 3 / 5 min / IP | Register new account, sends confirmation email |
+| `GET` | `/confirm-email?userId=&token=` | — | — | Confirm email via link, sends welcome email |
+| `POST` | `/login` | — | 5 / 1 min / IP | Login, returns access + refresh token |
+| `POST` | `/refresh-token` | — | 60 / 1 min / IP | Rotate refresh token |
+| `POST` | `/logout` | Bearer | — | Blacklist access token + revoke refresh token |
+| `POST` | `/forgot-password` | — | 3 / 15 min / IP | Send password reset link (always returns 200) |
+| `POST` | `/reset-password` | — | — | Reset password, revokes all refresh tokens |
 
 ---
 
@@ -336,13 +357,49 @@ Every endpoint returns the same envelope:
 }
 ```
 
-`errors` and `validationErrors` are omitted when empty. All `401` responses — missing token, expired token, revoked token — also return this format.
+`errors` and `validationErrors` are omitted when empty. All `401` and `429` responses also return this format — never a blank body.
+
+---
+
+## Rate Limiting
+
+Per-IP fixed-window limits protect all sensitive auth endpoints. When a limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header indicating how long to wait.
+
+| Endpoint | Limit | Window |
+|---|---|---|
+| `POST /login` | 5 requests | per IP / per minute |
+| `POST /register` | 3 requests | per IP / per 5 min |
+| `POST /forgot-password` | 3 requests | per IP / per 15 min |
+| All other endpoints | 60 requests | per IP / per minute |
+
+The rate limiter reads `X-Forwarded-For` first so it correctly identifies real client IPs when running behind a reverse proxy (Nginx, Cloudflare, etc.).
 
 ---
 
 ## Token Blacklist
 
 On logout, the JWT's `jti` claim and expiry are stored in the `RevokedTokens` table. Every subsequent authenticated request checks this table via `OnTokenValidated` in the JWT middleware. If the `jti` is found, the request is rejected with `401` before reaching the controller. Expired entries can be purged anytime via `TokenBlacklistService.PurgeExpiredAsync()`.
+
+---
+
+## Strongly-Typed Configs
+
+All environment variables are bound to typed classes in `Configs/` and validated at startup using Data Annotations + `.ValidateOnStart()`. The app **will not start** if any required variable is missing or invalid.
+
+| Class | Env Prefix | Key Variables |
+|---|---|---|
+| `JwtConfigs` | `JWT__` | `SecretKey`, `ValidIssuer`, `ValidAudience`, expiry |
+| `SmtpConfigs` | `Smtp__` | `Host`, `Port`, `Username`, `Password`, `EnableSsl` |
+| `SeedConfigs` | `Seed__Admin__` | Admin account credentials |
+| `AppConfigs` | `App__` | `BaseUrl` |
+
+To inject Configs into a service:
+```csharp
+public class EmailService(IOptions<SmtpConfigs> smtpOptions)
+{
+    private readonly SmtpConfigs _smtp = smtpOptions.Value;
+}
+```
 
 ---
 
@@ -362,11 +419,14 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 
 | Concern | Approach |
 |---|---|
-| Secrets | `.env` via DotNetEnv, gitignored |
+| Secrets | `.env` via DotNetEnv, gitignored; validated at startup |
 | Passwords | PBKDF2 + salt (ASP.NET Identity) |
 | Access token | JWT HS256 · 1 hr · `ClockSkew = 0` |
 | Refresh token | 64 random bytes · 7 days · rotated on every use |
 | Token blacklist | `jti` stored in DB on logout, checked on every request |
+| Rate limiting | Per-IP fixed-window on auth endpoints; `429` + `Retry-After` |
+| HTTPS | Enforced in non-development environments |
+| Proxy support | `X-Forwarded-For` / `X-Forwarded-Proto` via `ForwardedHeaders` middleware |
 | User enumeration | Login and forgot-password always return the same message |
 | Email confirmation | Required before login is allowed |
 | Account lockout | 5 failed attempts → 15-minute lockout |
@@ -388,4 +448,3 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 | Identity | ASP.NET Core Identity |
 | Secrets | DotNetEnv 3.1 |
 | Docs | Swashbuckle / Swagger 6.5 |
-

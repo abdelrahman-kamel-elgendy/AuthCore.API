@@ -1,37 +1,40 @@
 using AuthCore.API.Models;
+using AuthCore.API.Configs;
 using Microsoft.AspNetCore.Identity;
 
 namespace AuthCore.API.Data;
 
 public static class DbSeeder
 {
-    public static async Task SeedAsync(UserManager<UserModel> userManager, IConfiguration configuration)
+    /// <summary>
+    /// Seeds the admin account on every startup.
+    /// If the admin already exists, this is a no-op.
+    /// </summary>
+    public static async Task SeedAsync(UserManager<UserModel> userManager, SeedConfigs configs)
     {
-        var email = configuration["Seed:Admin:Email"] ?? "admin@authcore.com";
-        var password = configuration["Seed:Admin:Password"] ?? "Admin@123456";
-        var firstName = configuration["Seed:Admin:FirstName"] ?? "Super";
-        var lastName = configuration["Seed:Admin:LastName"] ?? "Admin";
-        var userName = configuration["Seed:Admin:UserName"] ?? "superadmin";
+        var admin = configs.Admin;
 
-        if (await userManager.FindByEmailAsync(email) is not null) return;
+        var existingAdmin = await userManager.FindByEmailAsync(admin.Email);
+        if (existingAdmin is not null)
+            return;
 
-        var admin = new UserModel
+        var adminUser = new UserModel
         {
-            FirstName = firstName,
-            LastName = lastName,
-            UserName = userName,
-            Email = email,
+            UserName = admin.UserName,
+            Email = admin.Email,
+            FirstName = admin.FirstName,
+            LastName = admin.LastName,
             EmailConfirmed = true,
-            IsActive = true,
-            CreatedAt = DateTime.UtcNow,
-            UpdatedAt = DateTime.UtcNow
+            IsActive = true
         };
 
-        var result = await userManager.CreateAsync(admin, password);
-        if (result.Succeeded)
+        var result = await userManager.CreateAsync(adminUser, admin.Password);
+        if (!result.Succeeded)
         {
-            await userManager.AddToRoleAsync(admin, "Admin");
-            await userManager.AddToRoleAsync(admin, "User");
+            var errors = string.Join(", ", result.Errors.Select(e => e.Description));
+            throw new InvalidOperationException($"Admin seeding failed: {errors}");
         }
+
+        await userManager.AddToRoleAsync(adminUser, "Admin");
     }
 }

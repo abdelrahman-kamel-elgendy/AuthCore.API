@@ -221,8 +221,8 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
 
     private JwtSecurityToken GenerateAccessToken(UserModel user, IList<string> roles)
     {
-        var jwtSettings = _configuration.GetSection("JWT");
-        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["SecretKey"]!));
+        var jwtConfigs = _configuration.GetSection("JWT");
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfigs["SecretKey"]!));
 
         var claims = new List<Claim>
         {
@@ -235,8 +235,8 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
 
         return new JwtSecurityToken(
-            issuer: jwtSettings["ValidIssuer"],
-            audience: jwtSettings["ValidAudience"],
+            issuer: jwtConfigs["ValidIssuer"],
+            audience: jwtConfigs["ValidAudience"],
             claims: claims,
             expires: DateTime.UtcNow.AddHours(1),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)
