@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace AuthCore.API.DTOs.Emai;
+namespace AuthCore.API.DTOs.Auth;
 
 public class ConfirmEmailRequestDto
 {
