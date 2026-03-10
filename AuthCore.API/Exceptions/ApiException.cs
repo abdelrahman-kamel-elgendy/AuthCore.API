@@ -1,13 +1,9 @@
+using System.Net;
+
 namespace AuthCore.API.Exceptions;
 
-public abstract class ApiException : Exception
+public abstract class ApiException(string message, HttpStatusCode statusCode = HttpStatusCode.InternalServerError, string? details = null) : Exception(message)
 {
-    public int StatusCode { get; }
-    public string? Details { get; }
-
-    protected ApiException(string message, int statusCode = 500, string? details = null) : base(message)
-    {
-        StatusCode = statusCode;
-        Details = details;
-    }
+    public HttpStatusCode StatusCode { get; } = statusCode;
+    public string? Details { get; } = details;
 }
