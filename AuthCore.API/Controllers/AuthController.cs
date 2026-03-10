@@ -35,7 +35,7 @@ public class AuthController(IAuthService authService) : ControllerBase
             HttpStatusCode.OK,
             true,
             "Email confirmed successfully. You can now log in.",
-            await _authService.ConfirmEmailAsync(new ConfirmEmailDto { UserId = userId, Token = token })
+            await _authService.ConfirmEmailAsync(new ConfirmEmailRequestDto { UserId = userId, Token = token })
         ));
 
     [HttpPost("login")]

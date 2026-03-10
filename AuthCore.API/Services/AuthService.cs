@@ -68,7 +68,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         };
     }
 
-    public async Task<AuthResponseDto> ConfirmEmailAsync(ConfirmEmailDto dto)
+    public async Task<AuthResponseDto> ConfirmEmailAsync(ConfirmEmailRequestDto dto)
     {
         var user = await _authRepository.GetUserByIdAsync(dto.UserId) ?? throw new NotFoundException("User", dto.UserId);
 
