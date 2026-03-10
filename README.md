@@ -165,6 +165,8 @@ This creates all tables, seeds the 20 test users, and prepares the schema.
 dotnet run
 ```
 
+Open **http://localhost:5000/swagger** 🎉
+
 > **First login**: use the admin credentials you set in `.env` under `Seed__Admin__*`.
 
 ---
