@@ -10,11 +10,10 @@ using Microsoft.EntityFrameworkCore;
 namespace AuthCore.API.Services;
 
 public class AdminService(IAuthRepository authRepository,
-    UserManager<UserModel> userManager, ILogger<AdminService> logger) : IAdminService
+    UserManager<UserModel> userManager) : IAdminService
 {
     private readonly IAuthRepository _authRepository = authRepository;
     private readonly UserManager<UserModel> _userManager = userManager;
-    private readonly ILogger<AdminService> _logger = logger;
 
     public async Task<PagedList<UserDto>> GetAllUsersAsync(int pageNumber, int pageSize)
     {
@@ -47,7 +46,6 @@ public class AdminService(IAuthRepository authRepository,
             throw new BadRequestException("User is already an Admin.");
 
         await _authRepository.AddToRoleAsync(user, "Admin");
-        _logger.LogInformation("User {UserId} promoted to Admin.", userId);
 
         return new AuthResponseDto
         {
@@ -65,7 +63,6 @@ public class AdminService(IAuthRepository authRepository,
             throw new BadRequestException("User is not an Admin.");
 
         await _authRepository.RemoveFromRoleAsync(user, "Admin");
-        _logger.LogInformation("User {UserId} demoted from Admin.", userId);
 
         return new AuthResponseDto
         {
@@ -88,8 +85,6 @@ public class AdminService(IAuthRepository authRepository,
         await _authRepository.UpdateUserAsync(user);
         await _authRepository.RevokeRefreshTokenAsync(user);
 
-        _logger.LogInformation("User {UserId} deactivated.", userId);
-
         return user;
     }
 
@@ -105,8 +100,6 @@ public class AdminService(IAuthRepository authRepository,
 
         await _authRepository.UpdateUserAsync(user);
 
-        _logger.LogInformation("User {UserId} activated.", userId);
-
         return user;
     }
 
@@ -115,8 +108,6 @@ public class AdminService(IAuthRepository authRepository,
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("User", userId);
 
         await _authRepository.DeleteUserAsync(user);
-
-        _logger.LogInformation("User {UserId} deleted.", userId);
 
         return user;
     }

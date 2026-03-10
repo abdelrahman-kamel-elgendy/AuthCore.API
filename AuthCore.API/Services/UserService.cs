@@ -7,10 +7,9 @@ using AuthCore.API.Services.Interfaces;
 
 namespace AuthCore.API.Services;
 
-public class UserService(IAuthRepository authRepository, ILogger<UserService> logger) : IUserService
+public class UserService(IAuthRepository authRepository) : IUserService
 {
     private readonly IAuthRepository _authRepository = authRepository;
-    private readonly ILogger<UserService> _logger = logger;
 
     public async Task<ProfileDto> GetProfileAsync(string userId)
     {
@@ -52,8 +51,6 @@ public class UserService(IAuthRepository authRepository, ILogger<UserService> lo
         if (!result.Succeeded)
             throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
 
-        _logger.LogInformation("Profile updated for: {UserId}", userId);
-
         return await GetProfileAsync(userId);
     }
 
@@ -71,8 +68,6 @@ public class UserService(IAuthRepository authRepository, ILogger<UserService> lo
             throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
 
         await _authRepository.RevokeRefreshTokenAsync(user);
-
-        _logger.LogInformation("Password changed for: {UserId}", userId);
 
         return new AuthResponseDto
         {

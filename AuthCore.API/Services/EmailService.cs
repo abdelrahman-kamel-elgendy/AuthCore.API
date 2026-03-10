@@ -4,10 +4,9 @@ using AuthCore.API.Services.Interfaces;
 
 namespace AuthCore.API.Services;
 
-public class EmailService(IConfiguration config, ILogger<EmailService> logger) : IEmailService
+public class EmailService(IConfiguration config) : IEmailService
 {
     private readonly IConfiguration _config = config;
-    private readonly ILogger<EmailService> _logger = logger;
 
     public async Task SendEmailAsync(string toEmail, string subject, string body)
     {
@@ -34,7 +33,6 @@ public class EmailService(IConfiguration config, ILogger<EmailService> logger) :
         message.To.Add(toEmail);
 
         await client.SendMailAsync(message);
-        _logger.LogInformation("Email sent to {Email} — Subject: {Subject}", toEmail, subject);
     }
 
     public static string Render(string templateName, Dictionary<string, string> values)

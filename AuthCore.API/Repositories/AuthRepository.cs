@@ -6,12 +6,10 @@ namespace AuthCore.API.Repositories;
 
 public class AuthRepository(
     UserManager<UserModel> userManager,
-    RoleManager<IdentityRole> roleManager,
-    ILogger<AuthRepository> logger) : IAuthRepository
+    RoleManager<IdentityRole> roleManager) : IAuthRepository
 {
     private readonly UserManager<UserModel> _userManager = userManager;
     private readonly RoleManager<IdentityRole> _roleManager = roleManager;
-    private readonly ILogger<AuthRepository> _logger = logger;
 
     // == User Management =======================================================
 
@@ -28,14 +26,7 @@ public class AuthRepository(
     public async Task<bool> CheckPasswordAsync(UserModel user, string password)
         => await _userManager.CheckPasswordAsync(user, password);
 
-    public async Task<IdentityResult> CreateUserAsync(UserModel user, string password)
-    {
-        var result = await _userManager.CreateAsync(user, password);
-        if (!result.Succeeded)
-            _logger.LogWarning("Failed to create user {Email}: {Errors}", user.Email, string.Join(", ", result.Errors.Select(e => e.Description)));
-       
-        return result;
-    }
+    public async Task<IdentityResult> CreateUserAsync(UserModel user, string password) => await _userManager.CreateAsync(user, password);
 
     public async Task<IdentityResult> UpdateUserAsync(UserModel user) => await _userManager.UpdateAsync(user);
 

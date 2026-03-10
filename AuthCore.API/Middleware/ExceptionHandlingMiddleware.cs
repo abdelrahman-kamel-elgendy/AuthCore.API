@@ -7,11 +7,9 @@ namespace AuthCore.API.Middleware;
 
 public class ExceptionHandlingMiddleware(
     RequestDelegate next,
-    ILogger<ExceptionHandlingMiddleware> logger,
     IWebHostEnvironment env)
 {
     private readonly RequestDelegate _next = next;
-    private readonly ILogger<ExceptionHandlingMiddleware> _logger = logger;
     private readonly IWebHostEnvironment _env = env;
 
     public async Task InvokeAsync(HttpContext context)
@@ -22,8 +20,6 @@ public class ExceptionHandlingMiddleware(
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        _logger.LogError(exception, "Unhandled exception: {Message}", exception.Message);
-
         var response = context.Response;
         response.ContentType = "application/json";
 
@@ -78,8 +74,6 @@ public class ExceptionHandlingMiddleware(
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 apiResponse.Status = HttpStatusCode.InternalServerError;
                 apiResponse.Message = "An internal server error occurred. Please try again later.";
-
-                // Only expose stack trace in development
                 if (_env.IsDevelopment())
                     apiResponse.Errors = [exception.Message, exception.StackTrace ?? string.Empty];
                 break;

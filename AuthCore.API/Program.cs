@@ -1,10 +1,10 @@
+using AuthCore.API.Configs;
 using AuthCore.API.Data;
 using AuthCore.API.Middleware;
 using AuthCore.API.Models;
 using AuthCore.API.Repositories;
 using AuthCore.API.Services;
 using AuthCore.API.Services.Interfaces;
-using AuthCore.API.Configs;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
@@ -12,12 +12,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
-using Serilog;
 
-
+// Bootstrap logger — captures any crash before the full logger is configured
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
     .CreateBootstrapLogger();
@@ -26,26 +26,22 @@ try
 {
     var builder = WebApplication.CreateBuilder(args);
 
+    // == Environment & Configuration ===============================================
+    // Load .env into environment variables — called ONCE before anything reads config
     DotNetEnv.Env.Load();
     builder.Configuration.AddEnvironmentVariables();
 
-    // == Replace the default logging with Serilog ==========================
+    // == Serilog ===================================================================
+    // Replaces .NET's default logger with Serilog.
+    // Full config is read from the "Serilog" section in appsettings.json.
     builder.Host.UseSerilog((context, services, configuration) =>
         configuration
-            .ReadFrom.Configuration(context.Configuration) // reads appsettings.json Serilog section
-            .ReadFrom.Services(services)                   // allows injecting ILogger into enrichers
+            .ReadFrom.Configuration(context.Configuration)
+            .ReadFrom.Services(services)
             .Enrich.FromLogContext()
     );
 
-    // == Environment & Configuration ===============================================
-    // Load .env into environment variables first — before anything reads config.
-    // In production, set real environment variables instead of using a .env file.
-    DotNetEnv.Env.Load();
-    builder.Configuration.AddEnvironmentVariables();
-
-    // == Strongly-Typed Configs ===================================================
-    // Bind every .env section to a typed class and validate required fields on
-    // startup — if anything is missing, the app refuses to start with a clear error.
+    // == Strongly-Typed Configs ====================================================
     builder.Services
         .AddOptions<JwtConfigs>()
         .BindConfiguration(JwtConfigs.SectionName)
@@ -71,13 +67,9 @@ try
         .ValidateOnStart();
 
     // == Forwarded Headers =========================================================
-    // Required when running behind a reverse proxy (Nginx, Cloudflare, etc.)
-    // so RemoteIpAddress reflects the real client IP, not the proxy IP.
     builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
         options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-        // In production, restrict to known proxy IPs to prevent header spoofing:
-        //   options.KnownProxies.Add(IPAddress.Parse("10.0.0.1"));
         options.KnownNetworks.Clear();
         options.KnownProxies.Clear();
     });
@@ -85,13 +77,11 @@ try
     // == Rate Limiting =============================================================
     builder.Services.AddRateLimiter(options =>
     {
-        // Resolves the real client IP — works behind proxies too
         static string GetClientIp(HttpContext ctx) =>
             ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
             ?? ctx.Connection.RemoteIpAddress?.ToString()
             ?? "unknown";
 
-        // 1. Login: 5 attempts / minute / IP
         options.AddPolicy("login", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
                 _ => new FixedWindowRateLimiterOptions
@@ -102,7 +92,6 @@ try
                     QueueLimit = 0
                 }));
 
-        // 2. Register: 3 attempts / 5 minutes / IP
         options.AddPolicy("register", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
                 _ => new FixedWindowRateLimiterOptions
@@ -113,7 +102,6 @@ try
                     QueueLimit = 0
                 }));
 
-        // 3. Forgot Password: 3 attempts / 15 minutes / IP
         options.AddPolicy("forgot-password", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
                 _ => new FixedWindowRateLimiterOptions
@@ -124,7 +112,6 @@ try
                     QueueLimit = 0
                 }));
 
-        // 4. Global fallback: 60 requests / minute / IP
         options.AddPolicy("global", ctx =>
             RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
                 _ => new FixedWindowRateLimiterOptions
@@ -135,7 +122,6 @@ try
                     QueueLimit = 0
                 }));
 
-        // Consistent 429 JSON body — matches the rest of the API's ApiResponse<T> envelope
         options.OnRejected = async (context, cancellationToken) =>
         {
             context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
@@ -189,13 +175,13 @@ try
 
         options.AddSecurityRequirement(new OpenApiSecurityRequirement
         {
-        {
-            new OpenApiSecurityScheme
             {
-                Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
-            },
-            Array.Empty<string>()
-        }
+                new OpenApiSecurityScheme
+                {
+                    Reference = new OpenApiReference { Type = ReferenceType.SecurityScheme, Id = "Bearer" }
+                },
+                Array.Empty<string>()
+            }
         });
     });
 
@@ -226,7 +212,6 @@ try
         opt.TokenLifespan = TimeSpan.FromHours(2));
 
     // == JWT Authentication ========================================================
-    // Read JWT config from the already-validated JwtConfigs — no raw string access.
     var jwtConfigs = builder.Configuration
         .GetSection(JwtConfigs.SectionName)
         .Get<JwtConfigs>()
@@ -283,14 +268,23 @@ try
     // == Build =====================================================================
     var app = builder.Build();
 
-    // == Log every HTTP request automatically =============================
-    // Place this early in the pipeline — before auth, after forwarded headers
+    // ── Middleware pipeline (order is significant) ────────────────────────────────
+
+    // 1. Global exception handler — must be outermost to catch everything
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+    // 2. Security headers — applied to every response
+    app.UseMiddleware<SecurityHeadersMiddleware>();
+
+    // 3. Forwarded headers — must resolve real IP before rate limiter reads it
+    app.UseForwardedHeaders();
+
+    // 4. Request logging — registered ONCE, after forwarded headers so ClientIP is resolved
     app.UseSerilogRequestLogging(options =>
     {
         options.MessageTemplate =
             "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000}ms";
 
-        // Enrich request logs with additional context
         options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
         {
             diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
@@ -302,20 +296,7 @@ try
         };
     });
 
-    // == Middleware pipeline (order is significant) ================================
-    // 1. Global exception handler — must be outermost to catch everything
-    app.UseMiddleware<ExceptionHandlingMiddleware>();
-
-    // 2. Security headers — applied to every response
-    app.UseMiddleware<SecurityHeadersMiddleware>();
-
-    // 3. Forwarded headers — must resolve real IP before rate limiter reads it
-    app.UseForwardedHeaders();
-    
-    // 4. Logging
-    app.UseSerilogRequestLogging();
-
-    // 5. Rate limiting — applied before auth so all requests are covered
+    // 5. Rate limiting — before auth so all requests are covered
     app.UseRateLimiter();
 
     // 6. HTTPS redirect — skipped in development
@@ -348,7 +329,6 @@ try
             if (!await roleManager.RoleExistsAsync(role))
                 await roleManager.CreateAsync(new IdentityRole(role));
 
-        // Pass IOptions<SeedConfigs> instead of raw IConfiguration
         var seedConfigs = scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>();
         await DbSeeder.SeedAsync(userManager, seedConfigs.Value);
     }
@@ -357,11 +337,9 @@ try
 }
 catch (Exception ex) when (ex is not HostAbortedException)
 {
-    // Catches fatal startup errors and writes them to the log
     Log.Fatal(ex, "Application terminated unexpectedly during startup.");
 }
 finally
 {
-    // Ensures all buffered log entries are flushed before the process exits
     Log.CloseAndFlush();
 }

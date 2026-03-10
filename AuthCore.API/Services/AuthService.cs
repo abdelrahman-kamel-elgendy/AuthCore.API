@@ -12,12 +12,11 @@ using Microsoft.IdentityModel.Tokens;
 namespace AuthCore.API.Services;
 
 public class AuthService(IAuthRepository authRepository, IEmailService emailService,
-    IConfiguration configuration, ILogger<AuthService> logger) : IAuthService
+    IConfiguration configuration) : IAuthService
 {
     private readonly IAuthRepository _authRepository = authRepository;
     private readonly IEmailService _emailService = emailService;
     private readonly IConfiguration _configuration = configuration;
-    private readonly ILogger<AuthService> _logger = logger;
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
     {
@@ -59,7 +58,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         });
 
         await _emailService.SendEmailAsync(user.Email!, "Confirm your AuthCore account", body);
-        _logger.LogInformation("New user registered: {Email}", user.Email);
 
         return new AuthResponseDto
         {
@@ -95,7 +93,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         });
 
         await _emailService.SendEmailAsync(user.Email!, "Welcome to AuthCore 🎉", body);
-        _logger.LogInformation("Email confirmed for: {Email}", user.Email);
 
         return new AuthResponseDto
         {
@@ -122,7 +119,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         });
 
         await _emailService.SendEmailAsync(user.Email!, "Reset your AuthCore password", body);
-        _logger.LogInformation("Password reset requested for: {Email}", user.Email);
 
         return new AuthResponseDto
         {
@@ -140,7 +136,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
             throw new ValidationException(result.Errors.ToDictionary(e => e.Code, e => new[] { e.Description }));
 
         await _authRepository.RevokeRefreshTokenAsync(user);
-        _logger.LogInformation("Password reset for: {Email}", user.Email);
     }
 
     public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
@@ -162,7 +157,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         var refreshToken = GenerateRefreshToken();
 
         await _authRepository.SaveRefreshTokenAsync(user, refreshToken);
-        _logger.LogInformation("User logged in: {Email}", user.Email);
 
         return new AuthResponseDto
         {
@@ -206,8 +200,6 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new UnauthorizedException("User not exists!");
 
         await _authRepository.RevokeRefreshTokenAsync(user);
-
-        _logger.LogInformation("User logged out: {UserId}", userId);
 
         return new AuthResponseDto
         {
