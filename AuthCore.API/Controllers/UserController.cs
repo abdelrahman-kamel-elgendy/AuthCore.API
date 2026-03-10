@@ -33,7 +33,7 @@ public class UserController : ControllerBase
 
     [HttpGet("me")]
     public async Task<IActionResult> GetProfile() => Ok(
-        new ApiResponse<UserDto>(
+        new ApiResponse<ProfileDto>(
             HttpStatusCode.OK,
             true,
             "Profile retrieved successfully.",
@@ -42,7 +42,7 @@ public class UserController : ControllerBase
 
     [HttpPut("me")]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto) => Ok(
-        new ApiResponse<UserDto>(
+        new ApiResponse<ProfileDto>(
             HttpStatusCode.OK,
             true,
             "Profile updated successfully.",

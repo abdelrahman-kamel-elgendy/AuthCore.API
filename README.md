@@ -1,3 +1,5 @@
+<div align=center>
+
 # 🔐 AuthCore.API
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com)
@@ -6,28 +8,27 @@
 
 A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle, registration, email confirmation, login, JWT + refresh token rotation, token blacklisting on logout, password management, user profiles, and admin controls.
 
+</div>
+
 ---
 
 ## Features
 
-- **JWT Authentication** — short-lived access tokens (1 hour), signed with HS256
-- **Refresh Token Rotation** — cryptographically random 64-byte tokens, rotated on every use, expire after 7 days
-- **Token Blacklist** — revoked access tokens are stored in DB and rejected on every request via `OnTokenValidated`; re-using a token after logout returns `401`
-- **Rate Limiting** — per-IP fixed-window limits on all auth endpoints; consistent `429` JSON response with `Retry-After` header
-- **Security Headers** — every response includes `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` via a dedicated middleware
-- **Email Confirmation** — required before login; sends branded HTML email on register
-- **Welcome Email** — sent automatically after email is confirmed
-- **Forgot / Reset Password** — secure reset flow via email link; revokes all refresh tokens on reset
-- **User Profile** — get and update own profile, change password
-- **Role-Based Authorization** — `Admin` and `User` roles seeded automatically on every startup
-- **Admin Panel** — paginated user list, promote/demote, activate/deactivate, delete
-- **Global Exception Handling** — middleware maps every exception type to a consistent JSON response
-- **Consistent 401 Response Body** — unauthorized requests always return `ApiResponse<T>` JSON, never a blank response
-- **Strongly-Typed Configs** — all `.env` variables are bound to validated Configs classes; app refuses to start if any required value is missing
-- **Environment Secrets** — all secrets in `.env` via `DotNetEnv`, never committed to git
-- **HTML Email Templates** — dark-themed, table-based templates for all transactional emails
-- **Database Seeding** — admin account seeded on every startup; 20 test users seeded via data migration
-- **Swagger UI** — interactive docs with Bearer token support at `/swagger`
+- **JWT Authentication**: access tokens signed with HS256, expire after 1 hour with zero clock skew tolerance; refresh tokens are cryptographically random 64-byte values, rotated on every use and expired after 7 days
+- **Token Blacklist**: on logout, the JWT `jti` claim is persisted to the database and validated on every subsequent request via `OnTokenValidated`; replaying a revoked token returns `401`
+- **Refresh Token Rotation**: every `/refresh-token` call invalidates the old token and issues a new one; reuse of a consumed token is detected and rejected
+- **Email Confirmation**: account login is blocked until the email address is verified; confirmation and welcome emails are sent automatically using dark-themed HTML templates
+- **Forgot / Reset Password**: time-limited reset links sent via email; successful reset immediately revokes all active refresh tokens across all devices
+- **Role-Based Authorization**: `Admin` and `User` roles enforced at the controller level via `[Authorize(Roles = "...")]`; roles and the default admin account are seeded on every startup
+- **Admin Controls**: paginated user management with promote/demote, activate/deactivate, and hard delete; deactivation immediately revokes all tokens and blocks future logins
+- **Rate Limiting**: per-IP fixed-window limits on sensitive endpoints (`5/min` login, `3/5min` register, `3/15min` forgot-password) using .NET 8's built-in `RateLimiter`; all rejections return a consistent `429` body with a `Retry-After` header
+- **Security Headers**: `SecurityHeadersMiddleware` injects `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on every response; CSP is relaxed automatically for Swagger in development
+- **Strongly-Typed Configuration**: all environment variables are bound to validated settings classes (`JwtConfigs`, `SmtpConfigs`, `SeedConfigs`, `AppConfigs`) with `.ValidateOnStart()`; the app refuses to start if any required value is missing or invalid
+- **Consistent API Envelope**: every response, including `401`, `429`, and validation errors, returns the same `ApiResponse<T>` JSON structure; no endpoint ever returns a blank body
+- **Global Exception Handling**: `ExceptionHandlingMiddleware` maps all custom exception types to their correct HTTP status codes; stack traces are only exposed in `Development`
+- **Account Security**: 5 failed login attempts trigger a 15-minute lockout; password policy enforces minimum length, mixed case, digits, and special characters
+- **Proxy-Aware**: `ForwardedHeadersMiddleware` resolves real client IPs from `X-Forwarded-For` so rate limiting and logging work correctly behind Nginx or Cloudflare
+- **Swagger UI**: fully documented with Bearer token support at `/swagger`; only exposed in `Development`
 
 ---
 
@@ -42,9 +43,9 @@ AuthCore.API/
 │
 ├── Data/
 │   ├── ApplicationDbContext.cs
-│   ├── DbSeeder.cs                    # Admin seeder — runs on every startup (accepts SeedConfigs)
+│   ├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
 │   └── Migrations/
-│       └── SeedTestUsers.cs           # 20 test users — run once via dotnet ef database update
+│       └── SeedTestUsers.cs           # 20 test users: run once via dotnet ef database update
 │
 ├── DTOs/
 │   ├── Auth/
@@ -109,8 +110,8 @@ AuthCore.API/
 │       ├── ResetPassword.html         # Sent on forgot-password
 │       └── WelcomeEmail.html          # Sent after email confirmed
 │
-├── .env                               # ⚠️ Secrets — gitignored
-├── .env.example                       # ✅ Template — safe to commit
+├── .env                               # ⚠️ Secrets: gitignored
+├── .env.example                       # ✅ Template: safe to commit
 ├── AuthCore.API.csproj
 └── Program.cs
 ```
@@ -123,88 +124,57 @@ AuthCore.API/
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
 - [PostgreSQL 14+](https://www.postgresql.org/download/)
-- EF Core CLI — `dotnet tool install --global dotnet-ef`
+- EF Core CLI: `dotnet tool install --global dotnet-ef`
 
-### 1 — Clone & restore
-
+### 1. Clone & restore
 ```bash
 git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
 cd AuthCore.API
 dotnet restore
 ```
 
-### 2 — Configure `.env`
+### 2. Install EF Core CLI
+```bash
+dotnet tool install --global dotnet-ef
+```
 
+### 3. Configure `.env`
 ```bash
 cp .env.example .env
 ```
 
-Fill in your values:
+Fill in all values in `.env` — database connection, JWT secret, SMTP credentials, and seed admin details.
 
-```env
-# Database
-ConnectionStrings__PostgreSQL=Host=localhost;Database=AuthCoreDB;Username=postgres;Password=YOUR_PASSWORD
+> **Gmail SMTP**: you must use an [App Password](https://myaccount.google.com/apppasswords), not your regular Gmail password. Enable 2FA on your account first, then generate an app password under *Security → 2-Step Verification → App passwords*.
 
-# JWT
-JWT__ValidIssuer=http://localhost:5000
-JWT__ValidAudience=http://localhost:4200
-JWT__SecretKey=AT_LEAST_32_CHARS_LONG_RANDOM_SECRET!@#$%
-JWT__AccessTokenExpiryMinutes=60
-JWT__RefreshTokenExpiryDays=7
-
-# App
-App__BaseUrl=http://localhost:5000
-
-# SMTP
-Smtp__Host=smtp.gmail.com
-Smtp__Port=587
-Smtp__Username=your@gmail.com
-Smtp__Password=your_app_password
-Smtp__FromName=AuthCore
-Smtp__EnableSsl=true
-
-# Seed
-Seed__Admin__Email=admin@authcore.com
-Seed__Admin__Password=Admin@123456
-Seed__Admin__FirstName=Super
-Seed__Admin__LastName=Admin
-Seed__Admin__UserName=superadmin
+### 4. Create the PostgreSQL database
+```bash
+psql -U postgres -c "CREATE DATABASE AuthCoreDB;"
 ```
 
-> `.env` is gitignored and will never be committed. All variables are validated at startup — the app will refuse to start with a clear error if any required value is missing or invalid.
->
-> In production, set these as real environment variables on your server or container instead of using a `.env` file.
+Or create it via pgAdmin if you prefer a GUI.
 
-### 3 — Generate password hash for test users
-
-Before running migrations, generate the hash for `"User@123456"` by adding this line temporarily to `Program.cs` before `app.Run()`:
-
-```csharp
-Console.WriteLine(new PasswordHasher<UserModel>().HashPassword(new UserModel(), "User@123456"));
-```
-
-Run `dotnet run`, copy the output hash, paste it into `Data/Migrations/SeedTestUsers.cs`:
-
-```csharp
-private const string PasswordHash = "paste_your_hash_here";
-```
-
-Then remove the temporary line.
-
-### 4 — Migrate & run
-
+### 5. Apply migrations
 ```bash
 dotnet ef database update
+```
+
+This creates all tables, seeds the 20 test users, and prepares the schema.
+
+### 6. Run
+```bash
 dotnet run
 ```
 
 Open **http://localhost:5000/swagger** 🎉
 
+> **First login**: use the admin credentials you set in `.env` under `Seed__Admin__*`.
+
 ---
 
 ## API Reference
 
-### Auth — `api/auth`
+### Auth: `api/auth`
 
 | Method | Route | Auth | Rate Limit | Description |
 |---|---|---|---|---|
@@ -221,25 +191,46 @@ Open **http://localhost:5000/swagger** 🎉
 #### `POST /api/auth/register`
 ```json
 {
-  "firstName": "John",
-  "lastName":  "Doe",
-  "username":  "johndoe",
-  "email":     "john@example.com",
+  "firstName":       "John",
+  "lastName":        "Doe",
+  "username":        "johndoe",
+  "email":           "john@example.com",
   "password":        "Secret@123",
   "confirmPassword": "Secret@123"
 }
 ```
 Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
 
+```json
+{
+  "status": 201,
+  "success": true,
+  "message": "Registration successful. Please check your email for confirmation.",
+  "data": {
+      "token":    "eyJhbGci...",
+      "userId":   "abc-123",
+      "userName": "johndoe",
+      "email":    "john@example.com"
+  }
+}
+```
+
 ---
 
 #### `POST /api/auth/login`
 ```json
-{ "email": "john@example.com", "password": "Secret@123" }
+{ 
+  "email":    "john@example.com", 
+  "password": "Secret@123" 
+}
 ```
+Optional: `RemrmberMe`.
+
 ```json
 {
+  "status": 200,
   "success": true,
+  "message": "Login successful.",
   "data": {
     "token":        "eyJhbGci...",
     "refreshToken": "abc123...",
@@ -256,10 +247,22 @@ Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
 
 #### `POST /api/auth/logout`
 Requires `Authorization: Bearer {token}`.
-
-- Blacklists the access token's `jti` in the `RevokedTokens` table
 - Revokes the refresh token server-side
 - Calling logout again with the same token returns `401`
+
+```json
+{
+  "status": 200,
+  "success": true,
+  "message": "Logged out successfully.",
+  "data": {
+      "userId":     "abc-123",
+      "userName":   "johndoe",
+      "firstName":  "John",
+      "email":      "john@example.com"
+  }
+}
+```
 
 ---
 
@@ -267,8 +270,18 @@ Requires `Authorization: Bearer {token}`.
 ```json
 { "email": "john@example.com" }
 ```
-Always returns `200` — never reveals whether the email exists.
-
+```json
+{
+    "status": 200,
+    "success": true,
+    "message": "Reset link has been sent.",
+    "data": {
+        "token":  "eyJhbGci...",
+        "userId": "abc-123",
+        "email":  "john@example.com"
+    }
+}
+```
 ---
 
 #### `POST /api/auth/reset-password`
@@ -280,10 +293,17 @@ Always returns `200` — never reveals whether the email exists.
   "confirmPassword": "NewSecret@456"
 }
 ```
+```json
+{
+  "status": 200,
+  "success": true,
+  "message": "Password reset successfully. Please log in with your new password."
+}
+```
 
 ---
 
-### User — `api/user` *(Bearer required)*
+### User: `api/user` *(Bearer required)*
 
 | Method | Route | Description |
 |---|---|---|
@@ -291,16 +311,56 @@ Always returns `200` — never reveals whether the email exists.
 | `PUT` | `/me` | Update profile fields |
 | `PUT` | `/me/change-password` | Change password, forces re-login |
 
-#### `PUT /api/user/me`
+#### `Get /api/user/me`.
+> Takes jsust bearer token and returns current logined user's profile.
+```json
+{
+  "status": 200,
+  "success": true,
+  "message": "Profile updated successfully.",
+  "data": {
+      "id":           "abc-123",
+      "userName":     "johndoe",
+      "email":        "john@example.com",
+      "firstName":    "Jane",
+      "lastName":     "Doe",
+      "phoneNumber":  "+1234567890",
+      "profileURL":   "https://example.com/avatar.png",
+      "address":      "123 Main St",
+      "birthDate":    "1995-06-15"
+  }
+}
+```
+
+
+#### `PUT /api/user/me`.
 All fields optional — only provided fields are updated:
 ```json
 {
   "firstName":   "Jane",
   "lastName":    "Doe",
-  "phoneNumber": "+1234567890",
-  "address":     "123 Main St",
-  "profileURL":  "https://example.com/avatar.png",
+  "phoneNumber": "+1234567888",
+  "address":     "125 Main St",
+  "profileURL":  "https://example.com/profile.png",
   "birthDate":   "1995-06-15"
+}
+```
+```json
+{
+  "status": 200,
+  "success": true,
+  "message": "Profile updated successfully.",
+  "data": {
+      "id":           "abc-123",
+      "userName":     "johndoe",
+      "email":        "john@example.com",
+      "firstName":    "Jane",
+      "lastName":     "Doe",
+      "phoneNumber":  "+1234567888",
+      "profileURL":   "https://example.com/profile.png",
+      "address":      "125 Main St",
+      "birthDate":    "1995-06-15"
+  }
 }
 ```
 
@@ -312,10 +372,22 @@ All fields optional — only provided fields are updated:
   "confirmPassword": "NewSecret@456"
 }
 ```
+```json
+{
+  "status": 200,
+  "success": true,
+  "message": "Password changed successfully. Please log in again.",
+  "data": {
+      "userId":   "abc-123",
+      "userName": "johndoe",
+      "email":    "john@example.com"
+  }
+}
+```
 
 ---
 
-### Admin — `api/admin` *(Admin role required)*
+### Admin: `api/admin` *(Admin role required)*
 
 | Method | Route | Description |
 |---|---|---|
@@ -347,6 +419,7 @@ Every endpoint returns the same envelope:
 
 ```json
 {
+  "status": 200,
   "success": true,
   "message": "...",
   "data":    { },
@@ -393,12 +466,6 @@ Every response includes a set of HTTP security headers injected by `SecurityHead
 > `Strict-Transport-Security` is only sent over HTTPS and is intentionally omitted on plain HTTP to avoid breaking local development.
 >
 > The `Content-Security-Policy` is relaxed automatically for `/swagger` routes in development to allow Swagger UI assets to load correctly.
-
----
-
-## Token Blacklist
-
-On logout, the JWT's `jti` claim and expiry are stored in the `RevokedTokens` table. Every subsequent authenticated request checks this table via `OnTokenValidated` in the JWT middleware. If the `jti` is found, the request is rejected with `401` before reaching the controller. Expired entries can be purged anytime via `TokenBlacklistService.PurgeExpiredAsync()`.
 
 ---
 

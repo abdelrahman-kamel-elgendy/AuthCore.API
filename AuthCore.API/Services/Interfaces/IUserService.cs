@@ -6,7 +6,7 @@ namespace AuthCore.API.Services.Interfaces;
 
 public interface IUserService
 {
-    Task<UserDto> GetProfileAsync(string userId);
-    Task<UserDto> UpdateProfileAsync(string userId, UpdateProfileDto dto);
+    Task<ProfileDto> GetProfileAsync(string userId);
+    Task<ProfileDto> UpdateProfileAsync(string userId, UpdateProfileDto dto);
     Task<AuthResponseDto> ChangePasswordAsync(string userId, ChangePasswordDto dto);
 }

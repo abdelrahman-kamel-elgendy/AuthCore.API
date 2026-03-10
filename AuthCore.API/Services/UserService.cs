@@ -18,12 +18,10 @@ public class UserService : IUserService
         _logger = logger;
     }
 
-    public async Task<UserDto> GetProfileAsync(string userId)
+    public async Task<ProfileDto> GetProfileAsync(string userId)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
-        var roles = await _authRepository.GetUserRolesAsync(user);
-
-        return new UserDto
+        return new ProfileDto
         {
             Id = user.Id,
             UserName = user.UserName!,
@@ -33,15 +31,11 @@ public class UserService : IUserService
             PhoneNumber = user.PhoneNumber,
             ProfileURL = user.ProfileURL,
             Address = user.Address,
-            BirthDate = user.BirthDate,
-            EmailConfirmed = user.EmailConfirmed,
-            IsActive = user.IsActive,
-            CreatedAt = user.CreatedAt,
-            Roles = [.. roles]
+            BirthDate = user.BirthDate
         };
     }
 
-    public async Task<UserDto> UpdateProfileAsync(string userId, UpdateProfileDto dto)
+    public async Task<ProfileDto> UpdateProfileAsync(string userId, UpdateProfileDto dto)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
 

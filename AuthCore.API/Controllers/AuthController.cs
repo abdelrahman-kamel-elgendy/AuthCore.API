@@ -99,6 +99,8 @@ public class AuthController(IAuthService authService) : ControllerBase
     [HttpPost("forgot-password")]
     [EnableRateLimiting("forgot-password")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto) =>
         Ok(new ApiResponse<object>(
             HttpStatusCode.OK,
