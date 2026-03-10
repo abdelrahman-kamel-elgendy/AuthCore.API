@@ -22,6 +22,8 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 - **Admin Controls**: paginated user management with promote/demote, activate/deactivate, and hard delete; deactivation immediately revokes all tokens and blocks future logins
 - **Rate Limiting**: per-IP fixed-window limits on sensitive endpoints (`5/min` login, `3/5min` register, `3/15min` forgot-password) using .NET 8's built-in `RateLimiter`; all rejections return a consistent `429` body with a `Retry-After` header
 - **Security Headers**: `SecurityHeadersMiddleware` injects `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on every response; CSP is relaxed automatically for Swagger in development
+- **Structured Logging**: Serilog replaces the default logger with configurable sinks (Console, File, Seq); every request is logged with method, path, status code, duration, client IP, and user agent via `UseSerilogRequestLogging`; Swagger traffic is silenced at `Verbose` level
+- **Health Checks**: `GET /health` reports live status of PostgreSQL and SMTP; returns `200` when all dependencies are healthy, `503` when any fail; response includes per-check status and duration in JSON
 - **Strongly-Typed Configuration**: all environment variables are bound to validated settings classes (`JwtConfigs`, `SmtpConfigs`, `SeedConfigs`, `AppConfigs`) with `.ValidateOnStart()`; the app refuses to start if any required value is missing or invalid
 - **Consistent API Envelope**: every response, including `401`, `429`, and validation errors, returns the same `ApiResponse<T>` JSON structure; no endpoint ever returns a blank body
 - **Global Exception Handling**: `ExceptionHandlingMiddleware` maps all custom exception types to their correct HTTP status codes; stack traces are only exposed in `Development`
@@ -40,35 +42,42 @@ AuthCore.API/
 │   ├── UserController.cs              # GetProfile, UpdateProfile, ChangePassword
 │   └── AdminController.cs             # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
 │
+├── Configs/                           # Strongly-typed configuration classes
+│   ├── AppConfigs.cs                  # App__BaseUrl
+│   ├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
+│   ├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
+│   └── SeedConfigs.cs                 # Seed__Admin__* values
+│
 ├── Data/
 │   ├── ApplicationDbContext.cs
-│   ├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
-│   └── Migrations/
-│       └── SeedTestUsers.cs           # 20 test users: run once via dotnet ef database update
+│   └── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
 │
 ├── DTOs/
 │   ├── Auth/
 │   │   ├── AuthResponseDto.cs
 │   │   ├── ConfirmEmailDto.cs
 │   │   ├── ForgotPasswordDto.cs
-│   |   ├── LoginDto.cs
+│   │   ├── LoginDto.cs
 │   │   ├── RefreshTokenDto.cs
-│   |   ├── RegisterDto.cs
+│   │   ├── RegisterDto.cs
 │   │   └── ResetPasswordDto.cs
 │   ├── User/
 │   │   ├── UserDto.cs
 │   │   ├── ChangePasswordDto.cs
 │   │   └── UpdateProfileDto.cs
 │   ├── Email/
-│   |   └── ConfirmEmailDto.cs
+│   │   └── ConfirmEmailDto.cs
 │   └── DataValidation.cs
 │
 ├── Exceptions/
 │   ├── ApiException.cs                # Abstract base
-│   └── CustomExceptions.cs            # web api custom Exceptions
+│   └── CustomExceptions.cs            # 400, 401, 403, 404, 409 exception types
+│
+├── HealthChecks/
+│   └── SmtpHealthCheck.cs             # TCP probe — verifies SMTP host:port is reachable
 │
 ├── Middleware/
-│   ├── ExceptionHandlingMiddleware.cs # Handle exceptions and returns api response errors
+│   ├── ExceptionHandlingMiddleware.cs # Maps exceptions to consistent ApiResponse<T> errors
 │   └── SecurityHeadersMiddleware.cs   # Injects security headers on every response
 │
 ├── Models/
@@ -92,12 +101,6 @@ AuthCore.API/
 │   ├── EmailService.cs
 │   └── EmailTemplateService.cs
 │
-├── Configs/                           # Strongly-typed configuration classes
-│   ├── AppConfigs.cs                  # App__BaseUrl
-│   ├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
-│   ├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
-│   └── SeedConfigs.cs                 # Seed__Admin__* values
-│
 ├── Templates/
 │   └── Email/
 │       ├── ConfirmEmail.html          # Sent on register
@@ -106,6 +109,7 @@ AuthCore.API/
 │
 ├── .env                               # ⚠️ Secrets: gitignored
 ├── .env.example                       # ✅ Template: safe to commit
+├── appsettings.json                   # Serilog configuration + app settings
 ├── AuthCore.API.csproj
 └── Program.cs
 ```
@@ -153,7 +157,7 @@ Or create it via pgAdmin if you prefer a GUI.
 dotnet ef database update
 ```
 
-This creates all tables, seeds the 20 test users, and prepares the schema.
+This creates all tables, and prepares the schema.
 
 ### 6. Run
 ```bash
@@ -201,10 +205,10 @@ Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
   "success": true,
   "message": "Registration successful. Please check your email for confirmation.",
   "data": {
-      "token":    "eyJhbGci...",
-      "userId":   "abc-123",
-      "userName": "johndoe",
-      "email":    "john@example.com"
+    "token":    "eyJhbGci...",
+    "userId":   "abc-123",
+    "userName": "johndoe",
+    "email":    "john@example.com"
   }
 }
 ```
@@ -213,12 +217,12 @@ Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
 
 #### `POST /api/auth/login`
 ```json
-{ 
-  "email":    "john@example.com", 
-  "password": "Secret@123" 
+{
+  "email":    "john@example.com",
+  "password": "Secret@123"
 }
 ```
-Optional: `RemrmberMe`.
+Optional: `rememberMe`.
 
 ```json
 {
@@ -250,10 +254,10 @@ Requires `Authorization: Bearer {token}`.
   "success": true,
   "message": "Logged out successfully.",
   "data": {
-      "userId":     "abc-123",
-      "userName":   "johndoe",
-      "firstName":  "John",
-      "email":      "john@example.com"
+    "userId":    "abc-123",
+    "userName":  "johndoe",
+    "firstName": "John",
+    "email":     "john@example.com"
   }
 }
 ```
@@ -264,18 +268,8 @@ Requires `Authorization: Bearer {token}`.
 ```json
 { "email": "john@example.com" }
 ```
-```json
-{
-    "status": 200,
-    "success": true,
-    "message": "Reset link has been sent.",
-    "data": {
-        "token":  "eyJhbGci...",
-        "userId": "abc-123",
-        "email":  "john@example.com"
-    }
-}
-```
+Always returns `200` — never reveals whether the email exists.
+
 ---
 
 #### `POST /api/auth/reset-password`
@@ -283,7 +277,7 @@ Requires `Authorization: Bearer {token}`.
 {
   "userId":          "abc-123",
   "token":           "reset_token_from_email",
-  "newPassword":     "NewSecret@456",
+  "password":        "NewSecret@456",
   "confirmPassword": "NewSecret@456"
 }
 ```
@@ -305,29 +299,27 @@ Requires `Authorization: Bearer {token}`.
 | `PUT` | `/me` | Update profile fields |
 | `PUT` | `/me/change-password` | Change password, forces re-login |
 
-#### `Get /api/user/me`.
-> Takes jsust bearer token and returns current logined user's profile.
+#### `GET /api/user/me`
 ```json
 {
   "status": 200,
   "success": true,
-  "message": "Profile updated successfully.",
+  "message": "Profile retrieved successfully.",
   "data": {
-      "id":           "abc-123",
-      "userName":     "johndoe",
-      "email":        "john@example.com",
-      "firstName":    "Jane",
-      "lastName":     "Doe",
-      "phoneNumber":  "+1234567890",
-      "profileURL":   "https://example.com/avatar.png",
-      "address":      "123 Main St",
-      "birthDate":    "1995-06-15"
+    "id":          "abc-123",
+    "userName":    "johndoe",
+    "email":       "john@example.com",
+    "firstName":   "Jane",
+    "lastName":    "Doe",
+    "phoneNumber": "+1234567890",
+    "profileURL":  "https://example.com/avatar.png",
+    "address":     "123 Main St",
+    "birthDate":   "1995-06-15"
   }
 }
 ```
 
-
-#### `PUT /api/user/me`.
+#### `PUT /api/user/me`
 All fields optional — only provided fields are updated:
 ```json
 {
@@ -339,24 +331,6 @@ All fields optional — only provided fields are updated:
   "birthDate":   "1995-06-15"
 }
 ```
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Profile updated successfully.",
-  "data": {
-      "id":           "abc-123",
-      "userName":     "johndoe",
-      "email":        "john@example.com",
-      "firstName":    "Jane",
-      "lastName":     "Doe",
-      "phoneNumber":  "+1234567888",
-      "profileURL":   "https://example.com/profile.png",
-      "address":      "125 Main St",
-      "birthDate":    "1995-06-15"
-  }
-}
-```
 
 #### `PUT /api/user/me/change-password`
 ```json
@@ -364,18 +338,6 @@ All fields optional — only provided fields are updated:
   "currentPassword": "Secret@123",
   "newPassword":     "NewSecret@456",
   "confirmPassword": "NewSecret@456"
-}
-```
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Password changed successfully. Please log in again.",
-  "data": {
-      "userId":   "abc-123",
-      "userName": "johndoe",
-      "email":    "john@example.com"
-  }
 }
 ```
 
@@ -413,7 +375,7 @@ Every endpoint returns the same envelope:
 
 ```json
 {
-  "status": 200,
+  "status":  200,
   "success": true,
   "message": "...",
   "data":    { },
@@ -425,6 +387,37 @@ Every endpoint returns the same envelope:
 ```
 
 `errors` and `validationErrors` are omitted when empty. All `401` and `429` responses also return this format — never a blank body.
+
+---
+
+## Health Checks
+
+`GET /health` — no authentication required.
+
+Reports the live status of all critical dependencies. Returns `200 OK` when everything is healthy, `503 Service Unavailable` when any check fails.
+
+```json
+{
+  "status": "Healthy",
+  "totalDuration": "00:00:00.0500",
+  "entries": {
+    "npgsql": {
+      "status":   "Healthy",
+      "duration": "00:00:00.0120"
+    },
+    "smtp": {
+      "status":      "Healthy",
+      "description": "SMTP reachable at smtp.gmail.com:587.",
+      "duration":    "00:00:00.0380"
+    }
+  }
+}
+```
+
+| Check | What It Verifies |
+|---|---|
+| `npgsql` | Opens a real connection to PostgreSQL and runs a ping query |
+| `smtp` | Opens a TCP connection to the configured SMTP host and port |
 
 ---
 
@@ -445,7 +438,7 @@ The rate limiter reads `X-Forwarded-For` first so it correctly identifies real c
 
 ## Security Headers
 
-Every response includes a set of HTTP security headers injected by `SecurityHeadersMiddleware`. No client configuration is required — they are applied automatically at the middleware level.
+Every response includes a set of HTTP security headers injected by `SecurityHeadersMiddleware`.
 
 | Header | Value | Protects Against |
 |---|---|---|
@@ -460,6 +453,24 @@ Every response includes a set of HTTP security headers injected by `SecurityHead
 > `Strict-Transport-Security` is only sent over HTTPS and is intentionally omitted on plain HTTP to avoid breaking local development.
 >
 > The `Content-Security-Policy` is relaxed automatically for `/swagger` routes in development to allow Swagger UI assets to load correctly.
+
+---
+
+## Structured Logging
+
+Serilog replaces the default .NET logger. Configuration lives in `appsettings.json` under the `Serilog` section — no code changes needed to adjust log levels or add sinks.
+
+Every HTTP request is logged with:
+
+```
+HTTP GET /api/auth/login responded 200 in 12.3ms
+  RequestHost:   localhost:5000
+  RequestScheme: http
+  UserAgent:     Mozilla/5.0 ...
+  ClientIP:      192.168.1.1
+```
+
+Swagger traffic (`/swagger/*`) is logged at `Verbose` level and suppressed by default to keep logs clean.
 
 ---
 
@@ -527,5 +538,6 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 | ORM | Entity Framework Core 8 |
 | Database | PostgreSQL via Npgsql |
 | Identity | ASP.NET Core Identity |
+| Logging | Serilog |
 | Secrets | DotNetEnv 3.1 |
 | Docs | Swashbuckle / Swagger 6.5 |

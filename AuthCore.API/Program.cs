@@ -1,11 +1,14 @@
 using AuthCore.API.Configs;
 using AuthCore.API.Data;
+using AuthCore.API.HealthChecks;
 using AuthCore.API.Middleware;
 using AuthCore.API.Models;
 using AuthCore.API.Repositories;
 using AuthCore.API.Services;
 using AuthCore.API.Services.Interfaces;
+using HealthChecks.UI.Client;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -13,6 +16,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
+using Serilog.Events;
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
@@ -265,6 +269,11 @@ try
     builder.Services.AddScoped<IAdminService, AdminService>();
     builder.Services.AddScoped<IEmailService, EmailService>();
 
+    // == Health Checks ============================================================  ← ADD HERE (registration)
+    builder.Services.AddHealthChecks()
+        .AddNpgSql(builder.Configuration.GetConnectionString("PostgreSQL")!)
+        .AddCheck<SmtpHealthCheck>("smtp");
+
     // == Build =====================================================================
     var app = builder.Build();
 
@@ -290,9 +299,18 @@ try
             diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
             diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
             diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
-            diagnosticContext.Set("ClientIP",
-                httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
-                ?? httpContext.Connection.RemoteIpAddress?.ToString());
+            diagnosticContext.Set("ClientIP", httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault() ?? httpContext.Connection.RemoteIpAddress?.ToString());
+        };
+
+        options.GetLevel = (httpContext, _, _) =>
+        {
+            var path = httpContext.Request.Path.Value ?? string.Empty;
+
+            // Silence noisy endpoints — still logged at Verbose level if needed
+            if (path.StartsWith("/swagger"))
+                return LogEventLevel.Verbose;
+
+            return LogEventLevel.Information;
         };
     });
 
@@ -315,6 +333,7 @@ try
     app.UseAuthorization();
 
     app.MapControllers();
+    app.MapHealthChecks("/health", new HealthCheckOptions { ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse }).AllowAnonymous();
 
     // == Migrate DB & Seed on startup ==============================================
     using (var scope = app.Services.CreateScope())
