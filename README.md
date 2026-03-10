@@ -187,7 +187,7 @@ Fill in your values — the format matches `.env.example` but uses Docker-specif
 
 #### 3. Start the stack
 ```bash
-docker compose --env-file .env.docker up -d
+docker-compose --env-file .env.docker up -d
 ```
 
 This pulls PostgreSQL, builds the API image, runs migrations automatically, and seeds the admin account. The API will not start until PostgreSQL passes its health check.
