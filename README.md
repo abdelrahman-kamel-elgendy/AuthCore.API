@@ -6,7 +6,7 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![JWT](https://img.shields.io/badge/Auth-JWT-orange)](https://jwt.io)
 
-A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle, registration, email confirmation, login, JWT + refresh token rotation, token blacklisting on logout, password management, user profiles, and admin controls.
+A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle, registration, email confirmation, login, JWT + refresh token rotation on logout, password management, user profiles, and admin controls.
 
 </div>
 
@@ -15,7 +15,6 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 ## Features
 
 - **JWT Authentication**: access tokens signed with HS256, expire after 1 hour with zero clock skew tolerance; refresh tokens are cryptographically random 64-byte values, rotated on every use and expired after 7 days
-- **Token Blacklist**: on logout, the JWT `jti` claim is persisted to the database and validated on every subsequent request via `OnTokenValidated`; replaying a revoked token returns `401`
 - **Refresh Token Rotation**: every `/refresh-token` call invalidates the old token and issues a new one; reuse of a consumed token is detected and rejected
 - **Email Confirmation**: account login is blocked until the email address is verified; confirmation and welcome emails are sent automatically using dark-themed HTML templates
 - **Forgot / Reset Password**: time-limited reset links sent via email; successful reset immediately revokes all active refresh tokens across all devices
@@ -510,7 +509,6 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 | Passwords | PBKDF2 + salt (ASP.NET Identity) |
 | Access token | JWT HS256 · 1 hr · `ClockSkew = 0` |
 | Refresh token | 64 random bytes · 7 days · rotated on every use |
-| Token blacklist | `jti` stored in DB on logout, checked on every request |
 | Rate limiting | Per-IP fixed-window on auth endpoints; `429` + `Retry-After` |
 | Security headers | `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` on every response |
 | HTTPS | Enforced in non-development environments |
