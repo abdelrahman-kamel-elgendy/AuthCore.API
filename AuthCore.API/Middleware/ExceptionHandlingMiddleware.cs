@@ -5,32 +5,19 @@ using AuthCore.API.Models;
 
 namespace AuthCore.API.Middleware;
 
-public class ExceptionHandlingMiddleware
+public class ExceptionHandlingMiddleware(
+    RequestDelegate next,
+    ILogger<ExceptionHandlingMiddleware> logger,
+    IWebHostEnvironment env)
 {
-    private readonly RequestDelegate _next;
-    private readonly ILogger<ExceptionHandlingMiddleware> _logger;
-    private readonly IWebHostEnvironment _env;
-
-    public ExceptionHandlingMiddleware(
-        RequestDelegate next,
-        ILogger<ExceptionHandlingMiddleware> logger,
-        IWebHostEnvironment env)
-    {
-        _next = next;
-        _logger = logger;
-        _env = env;
-    }
+    private readonly RequestDelegate _next = next;
+    private readonly ILogger<ExceptionHandlingMiddleware> _logger = logger;
+    private readonly IWebHostEnvironment _env = env;
 
     public async Task InvokeAsync(HttpContext context)
     {
-        try
-        {
-            await _next(context);
-        }
-        catch (Exception ex)
-        {
-            await HandleExceptionAsync(context, ex);
-        }
+        try { await _next(context); }
+        catch (Exception ex) { await HandleExceptionAsync(context, ex); }
     }
 
     private async Task HandleExceptionAsync(HttpContext context, Exception exception)
@@ -40,7 +27,7 @@ public class ExceptionHandlingMiddleware
         var response = context.Response;
         response.ContentType = "application/json";
 
-        var apiResponse = new ApiResponse<object>(false);
+        ApiResponse<object> apiResponse = new(false);
 
         switch (exception)
         {
@@ -88,19 +75,12 @@ public class ExceptionHandlingMiddleware
 
                 // Only expose stack trace in development
                 if (_env.IsDevelopment())
-                    apiResponse.Errors = new List<string>
-                    {
-                        exception.Message,
-                        exception.StackTrace ?? string.Empty
-                    };
+                    apiResponse.Errors = [exception.Message, exception.StackTrace ?? string.Empty];
                 break;
         }
 
-        var json = JsonSerializer.Serialize(apiResponse, new JsonSerializerOptions
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-        });
-
-        await response.WriteAsync(json);
+        await response.WriteAsync(JsonSerializer.Serialize(
+            apiResponse,
+            new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase }));
     }
 }
