@@ -1,10 +1,11 @@
-<div align=center>
+<div align="center">
 
 # 🔐 AuthCore.API
 
 [![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![JWT](https://img.shields.io/badge/Auth-JWT-orange)](https://jwt.io)
+[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
 
 A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle, registration, email confirmation, login, JWT + refresh token rotation on logout, password management, user profiles, and admin controls.
 
@@ -24,6 +25,7 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 - **Security Headers**: `SecurityHeadersMiddleware` injects `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on every response; CSP is relaxed automatically for Swagger in development
 - **Structured Logging**: Serilog replaces the default logger with configurable sinks (Console, File, Seq); every request is logged with method, path, status code, duration, client IP, and user agent via `UseSerilogRequestLogging`; Swagger traffic is silenced at `Verbose` level
 - **Health Checks**: `GET /health` reports live status of PostgreSQL and SMTP; returns `200` when all dependencies are healthy, `503` when any fail; response includes per-check status and duration in JSON
+- **Docker Support**: multi-stage `Dockerfile` produces a minimal runtime image (~200MB); `docker-compose.yml` orchestrates API + PostgreSQL with health-check gating so the API never starts before the database is ready
 - **Strongly-Typed Configuration**: all environment variables are bound to validated settings classes (`JwtConfigs`, `SmtpConfigs`, `SeedConfigs`, `AppConfigs`) with `.ValidateOnStart()`; the app refuses to start if any required value is missing or invalid
 - **Consistent API Envelope**: every response, including `401`, `429`, and validation errors, returns the same `ApiResponse<T>` JSON structure; no endpoint ever returns a blank body
 - **Global Exception Handling**: `ExceptionHandlingMiddleware` maps all custom exception types to their correct HTTP status codes; stack traces are only exposed in `Development`
@@ -50,24 +52,22 @@ AuthCore.API/
 │
 ├── Data/
 │   ├── ApplicationDbContext.cs
-│   └── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
+│   ├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
+│   └── Migrations/                    # EF Core migrations
 │
 ├── DTOs/
 │   ├── Auth/
 │   │   ├── AuthResponseDto.cs
-│   │   ├── ConfirmEmailDto.cs
-│   │   ├── ForgotPasswordDto.cs
-│   │   ├── LoginDto.cs
-│   │   ├── RefreshTokenDto.cs
-│   │   ├── RegisterDto.cs
-│   │   └── ResetPasswordDto.cs
-│   ├── User/
-│   │   ├── UserDto.cs
-│   │   ├── ChangePasswordDto.cs
-│   │   └── UpdateProfileDto.cs
-│   ├── Email/
-│   │   └── ConfirmEmailDto.cs
-│   └── DataValidation.cs
+│   │   ├── ConfirmEmailRequestDto.cs
+│   │   ├── ForgotPasswordRequestDto.cs
+│   │   ├── LoginRequestDto.cs
+│   │   ├── RefreshTokenRequestDto.cs
+│   │   ├── RegisterRequestDto.cs
+│   │   └── ResetPasswordRequestDto.cs
+│   └── User/
+│       ├── UserResponseDto.cs
+│       ├── ChangePasswordRequestDto.cs
+│       └── UpdateProfileRequestDto.cs
 │
 ├── Exceptions/
 │   ├── ApiException.cs                # Abstract base
@@ -109,8 +109,13 @@ AuthCore.API/
 │
 ├── .env                               # ⚠️ Secrets: gitignored
 ├── .env.example                       # ✅ Template: safe to commit
+├── .env.docker                        # ⚠️ Docker secrets: gitignored
+├── .env.docker.example                # ✅ Docker template: safe to commit
+├── .dockerignore
 ├── appsettings.json                   # Serilog configuration + app settings
 ├── AuthCore.API.csproj
+├── docker-compose.yml
+├── Dockerfile
 └── Program.cs
 ```
 
@@ -118,48 +123,40 @@ AuthCore.API/
 
 ## Getting Started
 
-### Prerequisites
+### Option A — Local development
 
+#### Prerequisites
 - [.NET 8 SDK](https://dotnet.microsoft.com/download)
 - [PostgreSQL 14+](https://www.postgresql.org/download/)
 - EF Core CLI: `dotnet tool install --global dotnet-ef`
 
-### 1. Clone & restore
+#### 1. Clone & restore
 ```bash
 git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
 cd AuthCore.API
 dotnet restore
 ```
 
-### 2. Install EF Core CLI
-```bash
-dotnet tool install --global dotnet-ef
-```
-
-### 3. Configure `.env`
+#### 2. Configure `.env`
 ```bash
 cp .env.example .env
 ```
 
-Fill in all values in `.env` — database connection, JWT secret, SMTP credentials, and seed admin details.
+Fill in all values — database connection, JWT secret, SMTP credentials, and seed admin details.
 
-> **Gmail SMTP**: you must use an [App Password](https://myaccount.google.com/apppasswords), not your regular Gmail password. Enable 2FA on your account first, then generate an app password under *Security → 2-Step Verification → App passwords*.
+> **Gmail SMTP**: use an [App Password](https://myaccount.google.com/apppasswords), not your regular Gmail password. Enable 2FA first, then generate an app password under *Security → 2-Step Verification → App passwords*.
 
-### 4. Create the PostgreSQL database
+#### 3. Create the PostgreSQL database
 ```bash
 psql -U postgres -c "CREATE DATABASE AuthCoreDB;"
 ```
 
-Or create it via pgAdmin if you prefer a GUI.
-
-### 5. Apply migrations
+#### 4. Apply migrations
 ```bash
 dotnet ef database update
 ```
 
-This creates all tables, and prepares the schema.
-
-### 6. Run
+#### 5. Run
 ```bash
 dotnet run
 ```
@@ -167,6 +164,54 @@ dotnet run
 Open **http://localhost:5000/swagger** 🎉
 
 > **First login**: use the admin credentials you set in `.env` under `Seed__Admin__*`.
+
+---
+
+### Option B — Docker (recommended)
+
+#### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop)
+
+#### 1. Clone
+```bash
+git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
+cd AuthCore.API
+```
+
+#### 2. Configure `.env.docker`
+```bash
+cp .env.docker.example .env.docker
+```
+
+Fill in your values — the format matches `.env.example` but uses Docker-specific variable names.
+
+#### 3. Start the stack
+```bash
+docker compose --env-file .env.docker up -d
+```
+
+This pulls PostgreSQL, builds the API image, runs migrations automatically, and seeds the admin account. The API will not start until PostgreSQL passes its health check.
+
+Open **http://localhost:8080/swagger** 🎉
+
+#### Useful Docker commands
+
+```bash
+# View live API logs
+docker compose logs -f api
+
+# Check container status and health
+docker compose ps
+
+# Rebuild after code changes
+docker compose --env-file .env.docker up -d --build
+
+# Stop everything (keeps database data)
+docker compose down
+
+# Stop and wipe the database volume
+docker compose down -v
+```
 
 ---
 
@@ -180,7 +225,7 @@ Open **http://localhost:5000/swagger** 🎉
 | `GET` | `/confirm-email?userId=&token=` | — | — | Confirm email via link, sends welcome email |
 | `POST` | `/login` | — | 5 / 1 min / IP | Login, returns access + refresh token |
 | `POST` | `/refresh-token` | — | 60 / 1 min / IP | Rotate refresh token |
-| `POST` | `/logout` | Bearer | — | Blacklist access token + revoke refresh token |
+| `POST` | `/logout` | Bearer | — | Revoke refresh token + blacklist access token |
 | `POST` | `/forgot-password` | — | 3 / 15 min / IP | Send password reset link (always returns 200) |
 | `POST` | `/reset-password` | — | — | Reset password, revokes all refresh tokens |
 
@@ -201,7 +246,7 @@ Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
 
 ```json
 {
-  "status": 201,
+  "status":  201,
   "success": true,
   "message": "Registration successful. Please check your email for confirmation.",
   "data": {
@@ -226,7 +271,7 @@ Optional: `rememberMe`.
 
 ```json
 {
-  "status": 200,
+  "status":  200,
   "success": true,
   "message": "Login successful.",
   "data": {
@@ -248,20 +293,6 @@ Requires `Authorization: Bearer {token}`.
 - Revokes the refresh token server-side
 - Calling logout again with the same token returns `401`
 
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Logged out successfully.",
-  "data": {
-    "userId":    "abc-123",
-    "userName":  "johndoe",
-    "firstName": "John",
-    "email":     "john@example.com"
-  }
-}
-```
-
 ---
 
 #### `POST /api/auth/forgot-password`
@@ -281,13 +312,6 @@ Always returns `200` — never reveals whether the email exists.
   "confirmPassword": "NewSecret@456"
 }
 ```
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Password reset successfully. Please log in with your new password."
-}
-```
 
 ---
 
@@ -299,35 +323,15 @@ Always returns `200` — never reveals whether the email exists.
 | `PUT` | `/me` | Update profile fields |
 | `PUT` | `/me/change-password` | Change password, forces re-login |
 
-#### `GET /api/user/me`
-```json
-{
-  "status": 200,
-  "success": true,
-  "message": "Profile retrieved successfully.",
-  "data": {
-    "id":          "abc-123",
-    "userName":    "johndoe",
-    "email":       "john@example.com",
-    "firstName":   "Jane",
-    "lastName":    "Doe",
-    "phoneNumber": "+1234567890",
-    "profileURL":  "https://example.com/avatar.png",
-    "address":     "123 Main St",
-    "birthDate":   "1995-06-15"
-  }
-}
-```
-
 #### `PUT /api/user/me`
 All fields optional — only provided fields are updated:
 ```json
 {
   "firstName":   "Jane",
   "lastName":    "Doe",
-  "phoneNumber": "+1234567888",
-  "address":     "125 Main St",
-  "profileURL":  "https://example.com/profile.png",
+  "phoneNumber": "+1234567890",
+  "address":     "123 Main St",
+  "profileURL":  "https://example.com/avatar.png",
   "birthDate":   "1995-06-15"
 }
 ```
@@ -394,7 +398,7 @@ Every endpoint returns the same envelope:
 
 `GET /health` — no authentication required.
 
-Reports the live status of all critical dependencies. Returns `200 OK` when everything is healthy, `503 Service Unavailable` when any check fails.
+Returns `200 OK` when all dependencies are healthy, `503 Service Unavailable` when any check fails.
 
 ```json
 {
@@ -423,8 +427,6 @@ Reports the live status of all critical dependencies. Returns `200 OK` when ever
 
 ## Rate Limiting
 
-Per-IP fixed-window limits protect all sensitive auth endpoints. When a limit is exceeded, the API returns `429 Too Many Requests` with a `Retry-After` header indicating how long to wait.
-
 | Endpoint | Limit | Window |
 |---|---|---|
 | `POST /login` | 5 requests | per IP / per minute |
@@ -437,8 +439,6 @@ The rate limiter reads `X-Forwarded-For` first so it correctly identifies real c
 ---
 
 ## Security Headers
-
-Every response includes a set of HTTP security headers injected by `SecurityHeadersMiddleware`.
 
 | Header | Value | Protects Against |
 |---|---|---|
@@ -460,17 +460,7 @@ Every response includes a set of HTTP security headers injected by `SecurityHead
 
 Serilog replaces the default .NET logger. Configuration lives in `appsettings.json` under the `Serilog` section — no code changes needed to adjust log levels or add sinks.
 
-Every HTTP request is logged with:
-
-```
-HTTP GET /api/auth/login responded 200 in 12.3ms
-  RequestHost:   localhost:5000
-  RequestScheme: http
-  UserAgent:     Mozilla/5.0 ...
-  ClientIP:      192.168.1.1
-```
-
-Swagger traffic (`/swagger/*`) is logged at `Verbose` level and suppressed by default to keep logs clean.
+Every HTTP request is logged with method, path, status code, duration, client IP, and user agent. Swagger traffic (`/swagger/*`) is logged at `Verbose` level and suppressed by default to keep logs clean.
 
 ---
 
@@ -539,5 +529,6 @@ All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
 | Database | PostgreSQL via Npgsql |
 | Identity | ASP.NET Core Identity |
 | Logging | Serilog |
+| Containerization | Docker + Docker Compose |
 | Secrets | DotNetEnv 3.1 |
 | Docs | Swashbuckle / Swagger 6.5 |

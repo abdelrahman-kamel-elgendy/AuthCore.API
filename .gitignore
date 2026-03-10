@@ -33,4 +33,6 @@ logs/
 
 ## .env files
 .env
-!.env.example
+
+## docker
+.env.docker
