@@ -7,19 +7,12 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AuthCore.API.Controllers;
 
-[Route("api/[controller]")]
 [ApiController]
+[Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
-public class AdminController : ControllerBase
+public class AdminController(IAdminService adminService) : ControllerBase
 {
-    private readonly IAdminService _adminService;
-    private readonly ILogger<AdminController> _logger;
-
-    public AdminController(IAdminService adminService, ILogger<AdminController> logger)
-    {
-        _adminService = adminService;
-        _logger = logger;
-    }
+    private readonly IAdminService _adminService = adminService;
 
     [HttpGet("users")]
     public async Task<IActionResult> GetAllUsers(

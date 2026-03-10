@@ -204,7 +204,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
 
     public async Task<AuthResponseDto> LogoutAsync(string userId)
     {
-        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
+        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new UnauthorizedException("User not exists!");
 
         await _authRepository.RevokeRefreshTokenAsync(user);
 

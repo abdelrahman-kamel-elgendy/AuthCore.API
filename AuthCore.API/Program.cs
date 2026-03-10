@@ -149,7 +149,13 @@ builder.Services.AddSwaggerGen(options =>
     {
         Title = "AuthCore API",
         Version = "v1",
-        Description = "JWT-based authentication API built with ASP.NET Core 8 and PostgreSQL."
+        Description = "Authentication REST API built with ASP.NET Core 8 and PostgreSQL",
+        Contact = new OpenApiContact
+        {
+            Name = "Abdelrahman Kamel",
+            Email = "abdelrahman.kamel.elgendy@gmail.com",
+            Url = new Uri("https://github.com/abdelrahman-kamel-elgendy")
+        }
     });
 
     options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme

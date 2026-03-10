@@ -17,25 +17,8 @@ public class AuthController(IAuthService authService) : ControllerBase
 {
     private readonly IAuthService _authService = authService;
 
-    // == Helpers ===============================================================
-
-    /// <summary>
-    /// Resolves the current user's ID from JWT claims.
-    /// Checks both ClaimTypes.NameIdentifier (ASP.NET Identity default) and
-    /// the standard JWT "sub" claim — whichever is present.
-    /// </summary>
-    private string CurrentUserId =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier)
-        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)
-        ?? throw new UnauthorizedException("User identity could not be resolved from token.");
-
-    // == Endpoints =============================================================
-
     [HttpPost("register")]
     [EnableRateLimiting("register")]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterDto registerDto) =>
         StatusCode(
             StatusCodes.Status201Created,
@@ -47,12 +30,7 @@ public class AuthController(IAuthService authService) : ControllerBase
             ));
 
     [HttpGet("confirm-email")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> ConfirmEmail(
-        [FromQuery] string userId,
-        [FromQuery] string token) =>
+    public async Task<IActionResult> ConfirmEmail([FromQuery] string userId, [FromQuery] string token) =>
         Ok(new ApiResponse<object>(
             HttpStatusCode.OK,
             true,
@@ -62,8 +40,6 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("login")]
     [EnableRateLimiting("login")]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginDto loginDto) =>
         Ok(new ApiResponse<AuthResponseDto>(
             HttpStatusCode.OK,
@@ -74,8 +50,6 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("refresh-token")]
     [EnableRateLimiting("global")]
-    [ProducesResponseType(typeof(ApiResponse<AuthResponseDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto) =>
         Ok(new ApiResponse<AuthResponseDto>(
             HttpStatusCode.OK,
@@ -86,8 +60,6 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [Authorize]
     [HttpPost("logout")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout() =>
         Ok(new ApiResponse<object>(
             HttpStatusCode.OK,
@@ -98,9 +70,6 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("forgot-password")]
     [EnableRateLimiting("forgot-password")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto) =>
         Ok(new ApiResponse<object>(
             HttpStatusCode.OK,
@@ -110,8 +79,6 @@ public class AuthController(IAuthService authService) : ControllerBase
         ));
 
     [HttpPost("reset-password")]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
     {
         await _authService.ResetPasswordAsync(dto);
@@ -122,4 +89,10 @@ public class AuthController(IAuthService authService) : ControllerBase
             null
         ));
     }
+
+
+    private string CurrentUserId =>
+        User.FindFirstValue(ClaimTypes.NameIdentifier)
+        ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+        ?? throw new UnauthorizedException("User identity could not be resolved from token.");
 }
