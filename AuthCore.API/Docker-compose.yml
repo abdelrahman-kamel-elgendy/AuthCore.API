@@ -1,8 +1,8 @@
 services:
 
-  # ── PostgreSQL Database ──────────────────────────────────────────────────────
+  # == PostgreSQL Database ======================================================
   postgres:
-    image: postgres:16-alpine        # alpine variant is smaller (~80MB vs ~400MB)
+    image: postgres:16-alpine
     container_name: authcore-postgres
     restart: unless-stopped
     environment:
@@ -10,9 +10,9 @@ services:
       POSTGRES_USER:     postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data   # persists data across restarts
+      - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"                  # expose to host for local DB tools (e.g. pgAdmin)
+      - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d AuthCoreDB"]
       interval: 10s
@@ -20,7 +20,23 @@ services:
       retries: 5
       start_period: 10s
 
-  # ── AuthCore API ─────────────────────────────────────────────────────────────
+  # == Redis ====================================================================
+  redis:
+    image: redis:7-alpine           # alpine variant — ~30MB
+    container_name: authcore-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"                 # expose to host for local inspection (redis-cli)
+    volumes:
+      - redis_data:/data            # persists data across container restarts
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # == AuthCore API =============================================================
   api:
     build:
       context: .
@@ -29,19 +45,24 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy    # wait until postgres passes its healthcheck
+        condition: service_healthy  # wait for postgres
+      redis:
+        condition: service_healthy  # wait for redis
     ports:
       - "8080:8080"
     environment:
       # Database
       ConnectionStrings__PostgreSQL: "Host=postgres;Database=AuthCoreDB;Username=postgres;Password=${DB_PASSWORD}"
 
+      # Redis — use service name as hostname inside Docker network
+      Redis__ConnectionString: "redis:6379"
+
       # JWT
-      JWT__ValidIssuer:              ${JWT_ISSUER}
-      JWT__ValidAudience:            ${JWT_AUDIENCE}
-      JWT__SecretKey:                ${JWT_SECRET_KEY}
-      JWT__AccessTokenExpiryMinutes: ${JWT_ACCESS_EXPIRY_MINUTES:-60}
-      JWT__RefreshTokenExpiryDays:   ${JWT_REFRESH_EXPIRY_DAYS:-7}
+      JWT__ValidIssuer: "${JWT_ISSUER}"
+      JWT__ValidAudience: "${JWT_AUDIENCE}"
+      JWT__SecretKey: "${JWT_SECRET_KEY}"
+      JWT__AccessTokenExpiryMinutes: "${JWT_ACCESS_EXPIRY_MINUTES:-60}"
+      JWT__RefreshTokenExpiryDays: "${JWT_REFRESH_EXPIRY_DAYS:-7}"
 
       # App
       App__BaseUrl:                  ${APP_BASE_URL}
@@ -69,7 +90,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s             # give the app time to run migrations on first boot
+      start_period: 30s
 
 volumes:
-  postgres_data:                    # named volume — survives container removal
+  postgres_data:
+  redis_data:                       # named volume — Redis data persists across restarts

@@ -11,12 +11,16 @@ using Microsoft.IdentityModel.Tokens;
 
 namespace AuthCore.API.Services;
 
-public class AuthService(IAuthRepository authRepository, IEmailService emailService,
-    IConfiguration configuration) : IAuthService
+public class AuthService(
+    IAuthRepository authRepository,
+    IEmailService emailService,
+    IConfiguration configuration,
+    ITokenBlacklistService tokenBlacklist) : IAuthService
 {
     private readonly IAuthRepository _authRepository = authRepository;
     private readonly IEmailService _emailService = emailService;
     private readonly IConfiguration _configuration = configuration;
+    private readonly ITokenBlacklistService _tokenBlacklist = tokenBlacklist;
 
     public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto dto)
     {
@@ -195,18 +199,26 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         };
     }
 
-    public async Task<AuthResponseDto> LogoutAsync(string userId)
+    public async Task<AuthResponseDto> LogoutAsync(string userId, string accessToken)
     {
-        var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new UnauthorizedException("User not exists!");
+        var user = await _authRepository.GetUserByIdAsync(userId)
+            ?? throw new UnauthorizedException("Invalid token!");
 
+        // Parse the raw JWT to extract jti and expiry
+        var handler = new JwtSecurityTokenHandler();
+        var jwt = handler.ReadJwtToken(accessToken);
+
+        // Blacklist the access token in Redis with TTL = remaining lifetime
+        await _tokenBlacklist.RevokeAsync(jwt.Id, jwt.ValidTo);
+
+        // Revoke the refresh token using the existing repository method
         await _authRepository.RevokeRefreshTokenAsync(user);
 
         return new AuthResponseDto
         {
             UserId = user.Id,
             UserName = user.UserName,
-            Email = user.Email,
-            FirstName = user.FirstName
+            Email = user.Email
         };
     }
 

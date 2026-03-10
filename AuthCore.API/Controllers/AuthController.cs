@@ -65,7 +65,9 @@ public class AuthController(IAuthService authService) : ControllerBase
             HttpStatusCode.OK,
             true,
             "Logged out successfully.",
-            await _authService.LogoutAsync(CurrentUserId)
+            await _authService.LogoutAsync(
+                CurrentUserId,
+                Request.Headers.Authorization.ToString().Replace("Bearer ", string.Empty, StringComparison.OrdinalIgnoreCase))
         ));
 
     [HttpPost("forgot-password")]

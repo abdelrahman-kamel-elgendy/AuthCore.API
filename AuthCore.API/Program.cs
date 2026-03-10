@@ -17,9 +17,13 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using Serilog;
 using Serilog.Events;
+using StackExchange.Redis;
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+
 
 // Bootstrap logger — captures any crash before the full logger is configured
 Log.Logger = new LoggerConfiguration()
@@ -32,7 +36,9 @@ try
 
     // == Environment & Configuration ===============================================
     // Load .env into environment variables — called ONCE before anything reads config
-    DotNetEnv.Env.Load();
+    if (builder.Environment.IsDevelopment())
+        DotNetEnv.Env.Load();
+
     builder.Configuration.AddEnvironmentVariables();
 
     // == Serilog ===================================================================
@@ -258,6 +264,26 @@ try
                 await context.Response.WriteAsJsonAsync(
                     new ApiResponse<object>(HttpStatusCode.Unauthorized, false, message, null)
                 );
+            },
+
+            OnTokenValidated = async context =>
+            {
+                var jti = context.Principal?
+                    .FindFirstValue(JwtRegisteredClaimNames.Jti);
+
+                if (string.IsNullOrEmpty(jti))
+                {
+                    context.Fail("Token is missing the jti claim.");
+                    return;
+                }
+
+                var blacklist = context.HttpContext.RequestServices
+                    .GetRequiredService<ITokenBlacklistService>();
+
+                if (await blacklist.IsRevokedAsync(jti))
+                {
+                    context.Fail("Token has been revoked.");
+                }
             }
         };
     });
@@ -269,7 +295,16 @@ try
     builder.Services.AddScoped<IAdminService, AdminService>();
     builder.Services.AddScoped<IEmailService, EmailService>();
 
-    // == Health Checks ============================================================  ← ADD HERE (registration)
+    // == Redis =====================================================================
+    var redisConnection = builder.Configuration["Redis:ConnectionString"]
+    ?? throw new InvalidOperationException("Redis connection string is not configured.");
+
+    builder.Services.AddSingleton<IConnectionMultiplexer>(
+        ConnectionMultiplexer.Connect(redisConnection));
+
+    builder.Services.AddScoped<ITokenBlacklistService, TokenBlacklistService>();
+
+    // == Health Checks ============================================================ 
     builder.Services.AddHealthChecks()
         .AddNpgSql(builder.Configuration.GetConnectionString("PostgreSQL")!)
         .AddCheck<SmtpHealthCheck>("smtp");
