@@ -68,6 +68,12 @@ public class ExceptionHandlingMiddleware(
                 apiResponse.Message = conflictEx.Message;
                 break;
 
+            case NotImplementedException notImplEx:
+                response.StatusCode = (int)HttpStatusCode.NotImplemented;
+                apiResponse.Status = HttpStatusCode.NotImplemented;
+                apiResponse.Message = notImplEx.Message;
+                break;
+
             default:
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 apiResponse.Status = HttpStatusCode.InternalServerError;
