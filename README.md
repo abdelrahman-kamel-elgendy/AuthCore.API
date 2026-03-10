@@ -65,12 +65,7 @@ AuthCore.API/
 │
 ├── Exceptions/
 │   ├── ApiException.cs                # Abstract base
-│   ├── BadRequestException.cs         # 400
-│   ├── ConflictException.cs           # 409
-│   ├── ForbiddenException.cs          # 403
-│   ├── NotFoundException.cs           # 404
-│   ├── UnauthorizedException.cs       # 401
-│   └── ValidationException.cs         # 400 + field errors
+│   └── CustomExceptions.cs            # web api custom Exceptions
 │
 ├── Middleware/
 │   ├── ExceptionHandlingMiddleware.cs # Handle exceptions and returns api response errors
