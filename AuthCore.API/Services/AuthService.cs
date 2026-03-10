@@ -18,7 +18,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
     private readonly IEmailService _emailService = emailService;
     private readonly IConfiguration _configuration = configuration;
 
-    public async Task<AuthResponseDto> RegisterAsync(RegisterDto dto)
+    public async Task<AuthResponseDto> RegisterAsync(RegisterRequestDto dto)
     {
         if (await _authRepository.UserExistsByEmailAsync(dto.Email))
             throw new ConflictException("Email is already registered.");
@@ -101,7 +101,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         };
     }
 
-    public async Task<AuthResponseDto> ForgotPasswordAsync(ForgotPasswordDto dto)
+    public async Task<AuthResponseDto> ForgotPasswordAsync(ForgotPasswordRequestDto dto)
     {
         var user = await _authRepository.GetUserByEmailAsync(dto.Email) ?? throw new NotFoundException("user", dto.Email);
 
@@ -128,7 +128,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         };
     }
 
-    public async Task ResetPasswordAsync(ResetPasswordDto dto)
+    public async Task ResetPasswordAsync(ResetPasswordRequestDto dto)
     {
         var user = await _authRepository.GetUserByIdAsync(dto.UserId) ?? throw new NotFoundException("User", dto.UserId);
         var result = await _authRepository.ResetPasswordAsync(user, Uri.UnescapeDataString(dto.Token), dto.Password);
@@ -138,7 +138,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         await _authRepository.RevokeRefreshTokenAsync(user);
     }
 
-    public async Task<AuthResponseDto> LoginAsync(LoginDto dto)
+    public async Task<AuthResponseDto> LoginAsync(LoginRequestDto dto)
     {
         var user = await _authRepository.GetUserByEmailAsync(dto.Email) ?? throw new NotFoundException("user", dto.Email);
 
@@ -170,7 +170,7 @@ public class AuthService(IAuthRepository authRepository, IEmailService emailServ
         };
     }
 
-    public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenDto dto)
+    public async Task<AuthResponseDto> RefreshTokenAsync(RefreshTokenRequestDto dto)
     {
         var user = await _authRepository.GetUserByRefreshTokenAsync(dto.RefreshToken) ?? throw new UnauthorizedException("Invalid refresh token.");
 

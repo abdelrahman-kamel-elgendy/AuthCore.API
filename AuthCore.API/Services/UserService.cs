@@ -11,10 +11,10 @@ public class UserService(IAuthRepository authRepository) : IUserService
 {
     private readonly IAuthRepository _authRepository = authRepository;
 
-    public async Task<ProfileDto> GetProfileAsync(string userId)
+    public async Task<ProfileResponseDto> GetProfileAsync(string userId)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
-        return new ProfileDto
+        return new ProfileResponseDto
         {
             Id = user.Id,
             UserName = user.UserName!,
@@ -28,7 +28,7 @@ public class UserService(IAuthRepository authRepository) : IUserService
         };
     }
 
-    public async Task<ProfileDto> UpdateProfileAsync(string userId, UpdateProfileDto dto)
+    public async Task<ProfileResponseDto> UpdateProfileAsync(string userId, UpdateProfileRequest dto)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
 
@@ -54,7 +54,7 @@ public class UserService(IAuthRepository authRepository) : IUserService
         return await GetProfileAsync(userId);
     }
 
-    public async Task<AuthResponseDto> ChangePasswordAsync(string userId, ChangePasswordDto dto)
+    public async Task<AuthResponseDto> ChangePasswordAsync(string userId, ChangePasswordRequestDto dto)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("User", userId);
 

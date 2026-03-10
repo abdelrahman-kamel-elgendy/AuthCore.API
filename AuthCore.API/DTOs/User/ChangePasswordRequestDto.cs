@@ -1,14 +1,11 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace AuthCore.API.DTOs.Auth;
+namespace AuthCore.API.DTOs.User;
 
-public class ResetPasswordDto
+public class ChangePasswordRequestDto
 {
-    [Required]
-    public string UserId { get; set; } = string.Empty;
-
-    [Required]
-    public string Token { get; set; } = string.Empty;
+    [Required, DataType(DataType.Password)]
+    public string CurrentPassword { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Password is required!")]
     [StringLength(100, MinimumLength = 8, ErrorMessage = "Password must be at least 8 characters!")]

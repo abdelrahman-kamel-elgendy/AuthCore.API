@@ -6,8 +6,8 @@ namespace AuthCore.API.Services.Interfaces;
 
 public interface IAdminService
 {
-    Task<PagedList<UserDto>> GetAllUsersAsync(int pageNumber, int pageSize);
-    Task<UserDto> GetUserByIdAsync(string userId);
+    Task<PagedList<UserResponseDto>> GetAllUsersAsync(int pageNumber, int pageSize);
+    Task<UserResponseDto> GetUserByIdAsync(string userId);
     Task<AuthResponseDto> PromoteToAdminAsync(string userId);
     Task<AuthResponseDto> DemoteFromAdminAsync(string userId);
     Task<UserModel> DeactivateUserAsync(string userId);

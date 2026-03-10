@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace AuthCore.API.DTOs.Emai;
 
-public class ConfirmEmailDto
+public class ConfirmEmailRequestDto
 {
     [Required]
     public string UserId { get; set; } = string.Empty;

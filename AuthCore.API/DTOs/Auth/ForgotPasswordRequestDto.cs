@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace AuthCore.API.DTOs.Auth;
 
-public class ForgotPasswordDto
+public class ForgotPasswordRequestDto
 {
     [Required(ErrorMessage = "Email is required!")]
     [EmailAddress(ErrorMessage = "Invalid email format!")]

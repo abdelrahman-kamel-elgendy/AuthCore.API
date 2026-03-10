@@ -19,7 +19,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("register")]
     [EnableRateLimiting("register")]
-    public async Task<IActionResult> Register([FromBody] RegisterDto registerDto) =>
+    public async Task<IActionResult> Register([FromBody] RegisterRequestDto registerDto) =>
         StatusCode(
             StatusCodes.Status201Created,
             new ApiResponse<AuthResponseDto>(
@@ -40,7 +40,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("login")]
     [EnableRateLimiting("login")]
-    public async Task<IActionResult> Login([FromBody] LoginDto loginDto) =>
+    public async Task<IActionResult> Login([FromBody] LoginRequestDto loginDto) =>
         Ok(new ApiResponse<AuthResponseDto>(
             HttpStatusCode.OK,
             true,
@@ -50,7 +50,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("refresh-token")]
     [EnableRateLimiting("global")]
-    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenDto refreshTokenDto) =>
+    public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequestDto refreshTokenDto) =>
         Ok(new ApiResponse<AuthResponseDto>(
             HttpStatusCode.OK,
             true,
@@ -70,7 +70,7 @@ public class AuthController(IAuthService authService) : ControllerBase
 
     [HttpPost("forgot-password")]
     [EnableRateLimiting("forgot-password")]
-    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordDto dto) =>
+    public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequestDto dto) =>
         Ok(new ApiResponse<object>(
             HttpStatusCode.OK,
             true,
@@ -79,7 +79,7 @@ public class AuthController(IAuthService authService) : ControllerBase
         ));
 
     [HttpPost("reset-password")]
-    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordDto dto)
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequestDto dto)
     {
         await _authService.ResetPasswordAsync(dto);
         return Ok(new ApiResponse<object>(

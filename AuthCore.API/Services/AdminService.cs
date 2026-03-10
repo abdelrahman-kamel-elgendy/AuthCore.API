@@ -15,7 +15,7 @@ public class AdminService(IAuthRepository authRepository,
     private readonly IAuthRepository _authRepository = authRepository;
     private readonly UserManager<UserModel> _userManager = userManager;
 
-    public async Task<PagedList<UserDto>> GetAllUsersAsync(int pageNumber, int pageSize)
+    public async Task<PagedList<UserResponseDto>> GetAllUsersAsync(int pageNumber, int pageSize)
     {
         var query = _userManager.Users.OrderBy(u => u.CreatedAt);
         var total = await query.CountAsync();
@@ -24,14 +24,14 @@ public class AdminService(IAuthRepository authRepository,
             .Take(pageSize)
             .ToListAsync();
 
-        var dtos = new List<UserDto>();
+        var dtos = new List<UserResponseDto>();
         foreach (var user in users)
             dtos.Add(MapToDto(user, await _authRepository.GetUserRolesAsync(user)));
 
-        return new PagedList<UserDto>(dtos, total, pageNumber, pageSize);
+        return new PagedList<UserResponseDto>(dtos, total, pageNumber, pageSize);
     }
 
-    public async Task<UserDto> GetUserByIdAsync(string userId)
+    public async Task<UserResponseDto> GetUserByIdAsync(string userId)
     {
         var user = await _authRepository.GetUserByIdAsync(userId) ?? throw new NotFoundException("user", userId);
         var roles = await _authRepository.GetUserRolesAsync(user);
@@ -112,7 +112,7 @@ public class AdminService(IAuthRepository authRepository,
         return user;
     }
 
-    private static UserDto MapToDto(UserModel user, IList<string> roles) => new()
+    private static UserResponseDto MapToDto(UserModel user, IList<string> roles) => new()
     {
         Id = user.Id,
         UserName = user.UserName!,

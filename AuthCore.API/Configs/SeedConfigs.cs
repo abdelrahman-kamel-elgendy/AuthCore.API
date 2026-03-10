@@ -8,5 +8,5 @@ public class SeedConfigs
     public const string SectionName = "Seed";
 
     [Required]
-    public RegisterDto Admin { get; init; } = new();
+    public RegisterRequestDto Admin { get; init; } = new();
 }

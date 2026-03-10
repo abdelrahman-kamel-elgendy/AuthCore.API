@@ -27,7 +27,7 @@ public class AdminController(IAdminService adminService) : ControllerBase
         Response.Headers.Append("X-Pagination", System.Text.Json.JsonSerializer.Serialize(metadata));
 
         return Ok(
-            new ApiResponse<PagedList<UserDto>>(
+            new ApiResponse<PagedList<UserResponseDto>>(
                 HttpStatusCode.OK,
                 true,
                 "Users retrieved successfully.",
@@ -37,7 +37,7 @@ public class AdminController(IAdminService adminService) : ControllerBase
 
     [HttpGet("users/{userId}")]
     public async Task<IActionResult> GetUser(string userId) => Ok(
-        new ApiResponse<UserDto>(
+        new ApiResponse<UserResponseDto>(
             HttpStatusCode.OK,
             true,
             $"User {userId} retrieved successfully.",

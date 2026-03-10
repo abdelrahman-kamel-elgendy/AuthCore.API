@@ -26,7 +26,7 @@ public class UserController(IUserService userService) : ControllerBase
 
     [HttpGet("me")]
     public async Task<IActionResult> GetProfile() => Ok(
-        new ApiResponse<ProfileDto>(
+        new ApiResponse<ProfileResponseDto>(
             HttpStatusCode.OK,
             true,
             "Profile retrieved successfully.",
@@ -34,8 +34,8 @@ public class UserController(IUserService userService) : ControllerBase
         ));
 
     [HttpPut("me")]
-    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileDto dto) => Ok(
-        new ApiResponse<ProfileDto>(
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest dto) => Ok(
+        new ApiResponse<ProfileResponseDto>(
             HttpStatusCode.OK,
             true,
             "Profile updated successfully.",
@@ -43,7 +43,7 @@ public class UserController(IUserService userService) : ControllerBase
         ));
 
     [HttpPut("me/change-password")]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordDto dto) => Ok(
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto dto) => Ok(
         new ApiResponse<object>(
             HttpStatusCode.OK,
             true,
