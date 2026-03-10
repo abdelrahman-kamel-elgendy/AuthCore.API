@@ -15,16 +15,9 @@ namespace AuthCore.API.Controllers;
 [Route("api/[controller]")]
 [ApiController]
 [Authorize]
-public class UserController : ControllerBase
+public class UserController(IUserService userService) : ControllerBase
 {
-    private readonly IUserService _userService;
-    private readonly ILogger<UserController> _logger;
-
-    public UserController(IUserService userService, ILogger<UserController> logger)
-    {
-        _userService = userService;
-        _logger = logger;
-    }
+    private readonly IUserService _userService = userService;
 
     private string GetCurrentUserId() =>
         User.FindFirstValue(ClaimTypes.NameIdentifier)

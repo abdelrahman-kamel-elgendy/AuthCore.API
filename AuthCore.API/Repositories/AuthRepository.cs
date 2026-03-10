@@ -4,23 +4,17 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AuthCore.API.Repositories;
 
-public class AuthRepository : IAuthRepository
+public class AuthRepository(
+    UserManager<UserModel> userManager,
+    RoleManager<IdentityRole> roleManager,
+    ILogger<AuthRepository> logger) : IAuthRepository
 {
-    private readonly UserManager<UserModel> _userManager;
-    private readonly RoleManager<IdentityRole> _roleManager;
-    private readonly ILogger<AuthRepository> _logger;
+    private readonly UserManager<UserModel> _userManager = userManager;
+    private readonly RoleManager<IdentityRole> _roleManager = roleManager;
+    private readonly ILogger<AuthRepository> _logger = logger;
 
-    public AuthRepository(
-        UserManager<UserModel> userManager,
-        RoleManager<IdentityRole> roleManager,
-        ILogger<AuthRepository> logger)
-    {
-        _userManager = userManager;
-        _roleManager = roleManager;
-        _logger = logger;
-    }
+    // == User Management =======================================================
 
-    // ── User Management ───────────────────────────────────────────────────────
 
     public async Task<UserModel?> GetUserByIdAsync(string userId)
         => await _userManager.FindByIdAsync(userId);
@@ -48,7 +42,7 @@ public class AuthRepository : IAuthRepository
     public async Task<IdentityResult> DeleteUserAsync(UserModel user)
         => await _userManager.DeleteAsync(user);
 
-    // ── Role Management ───────────────────────────────────────────────────────
+    // == Role Management =======================================================
 
     public async Task<IList<string>> GetUserRolesAsync(UserModel user)
         => await _userManager.GetRolesAsync(user);

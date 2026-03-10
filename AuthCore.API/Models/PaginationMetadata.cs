@@ -9,9 +9,7 @@ public class PaginationMetadata
     public bool HasPrevious { get; set; }
     public bool HasNext { get; set; }
 
-    /// <summary>
-    /// Static factory — accepts any PagedList&lt;T&gt; without casting to object.
-    /// </summary>
+
     public static PaginationMetadata From<T>(PagedList<T> pagedList) => new()
     {
         CurrentPage = pagedList.PageNumber,

@@ -9,19 +9,12 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AuthCore.API.Services;
 
-public class AdminService : IAdminService
+public class AdminService(IAuthRepository authRepository,
+    UserManager<UserModel> userManager, ILogger<AdminService> logger) : IAdminService
 {
-    private readonly IAuthRepository _authRepository;
-    private readonly UserManager<UserModel> _userManager;
-    private readonly ILogger<AdminService> _logger;
-
-    public AdminService(IAuthRepository authRepository,
-        UserManager<UserModel> userManager, ILogger<AdminService> logger)
-    {
-        _authRepository = authRepository;
-        _userManager = userManager;
-        _logger = logger;
-    }
+    private readonly IAuthRepository _authRepository = authRepository;
+    private readonly UserManager<UserModel> _userManager = userManager;
+    private readonly ILogger<AdminService> _logger = logger;
 
     public async Task<PagedList<UserDto>> GetAllUsersAsync(int pageNumber, int pageSize)
     {

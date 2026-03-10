@@ -15,161 +15,180 @@ using Microsoft.OpenApi.Models;
 using System.Net;
 using System.Text;
 using System.Threading.RateLimiting;
+using Serilog;
 
-var builder = WebApplication.CreateBuilder(args);
 
-// == Environment & Configuration ===============================================
-// Load .env into environment variables first — before anything reads config.
-// In production, set real environment variables instead of using a .env file.
-DotNetEnv.Env.Load();
-builder.Configuration.AddEnvironmentVariables();
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .CreateBootstrapLogger();
 
-// == Strongly-Typed Configs ===================================================
-// Bind every .env section to a typed class and validate required fields on
-// startup — if anything is missing, the app refuses to start with a clear error.
-builder.Services
-    .AddOptions<JwtConfigs>()
-    .BindConfiguration(JwtConfigs.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<SmtpConfigs>()
-    .BindConfiguration(SmtpConfigs.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<SeedConfigs>()
-    .BindConfiguration(SeedConfigs.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-builder.Services
-    .AddOptions<AppConfigs>()
-    .BindConfiguration(AppConfigs.SectionName)
-    .ValidateDataAnnotations()
-    .ValidateOnStart();
-
-// == Forwarded Headers =========================================================
-// Required when running behind a reverse proxy (Nginx, Cloudflare, etc.)
-// so RemoteIpAddress reflects the real client IP, not the proxy IP.
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+try
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    // In production, restrict to known proxy IPs to prevent header spoofing:
-    //   options.KnownProxies.Add(IPAddress.Parse("10.0.0.1"));
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
-});
+    var builder = WebApplication.CreateBuilder(args);
 
-// == Rate Limiting =============================================================
-builder.Services.AddRateLimiter(options =>
-{
-    // Resolves the real client IP — works behind proxies too
-    static string GetClientIp(HttpContext ctx) =>
-        ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
-        ?? ctx.Connection.RemoteIpAddress?.ToString()
-        ?? "unknown";
+    DotNetEnv.Env.Load();
+    builder.Configuration.AddEnvironmentVariables();
 
-    // 1. Login: 5 attempts / minute / IP
-    options.AddPolicy("login", ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 5,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }));
+    // == Replace the default logging with Serilog ==========================
+    builder.Host.UseSerilog((context, services, configuration) =>
+        configuration
+            .ReadFrom.Configuration(context.Configuration) // reads appsettings.json Serilog section
+            .ReadFrom.Services(services)                   // allows injecting ILogger into enrichers
+            .Enrich.FromLogContext()
+    );
 
-    // 2. Register: 3 attempts / 5 minutes / IP
-    options.AddPolicy("register", ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 3,
-                Window = TimeSpan.FromMinutes(5),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }));
+    // == Environment & Configuration ===============================================
+    // Load .env into environment variables first — before anything reads config.
+    // In production, set real environment variables instead of using a .env file.
+    DotNetEnv.Env.Load();
+    builder.Configuration.AddEnvironmentVariables();
 
-    // 3. Forgot Password: 3 attempts / 15 minutes / IP
-    options.AddPolicy("forgot-password", ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 3,
-                Window = TimeSpan.FromMinutes(15),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }));
+    // == Strongly-Typed Configs ===================================================
+    // Bind every .env section to a typed class and validate required fields on
+    // startup — if anything is missing, the app refuses to start with a clear error.
+    builder.Services
+        .AddOptions<JwtConfigs>()
+        .BindConfiguration(JwtConfigs.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
 
-    // 4. Global fallback: 60 requests / minute / IP
-    options.AddPolicy("global", ctx =>
-        RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
-            _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 60,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }));
+    builder.Services
+        .AddOptions<SmtpConfigs>()
+        .BindConfiguration(SmtpConfigs.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
 
-    // Consistent 429 JSON body — matches the rest of the API's ApiResponse<T> envelope
-    options.OnRejected = async (context, cancellationToken) =>
+    builder.Services
+        .AddOptions<SeedConfigs>()
+        .BindConfiguration(SeedConfigs.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    builder.Services
+        .AddOptions<AppConfigs>()
+        .BindConfiguration(AppConfigs.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
+
+    // == Forwarded Headers =========================================================
+    // Required when running behind a reverse proxy (Nginx, Cloudflare, etc.)
+    // so RemoteIpAddress reflects the real client IP, not the proxy IP.
+    builder.Services.Configure<ForwardedHeadersOptions>(options =>
     {
-        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        context.HttpContext.Response.ContentType = "application/json";
+        options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+        // In production, restrict to known proxy IPs to prevent header spoofing:
+        //   options.KnownProxies.Add(IPAddress.Parse("10.0.0.1"));
+        options.KnownNetworks.Clear();
+        options.KnownProxies.Clear();
+    });
 
-        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
-            context.HttpContext.Response.Headers.RetryAfter =
-                ((int)retryAfter.TotalSeconds).ToString();
-
-        await context.HttpContext.Response.WriteAsJsonAsync(
-            new ApiResponse<object>(
-                HttpStatusCode.TooManyRequests,
-                false,
-                "Too many requests. Please slow down and try again later.",
-                "Rate limit exceeded."
-            ),
-            cancellationToken
-        );
-    };
-});
-
-// == Controllers ===============================================================
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-
-// == Swagger ===================================================================
-builder.Services.AddSwaggerGen(options =>
-{
-    options.SwaggerDoc("v1", new OpenApiInfo
+    // == Rate Limiting =============================================================
+    builder.Services.AddRateLimiter(options =>
     {
-        Title = "AuthCore API",
-        Version = "v1",
-        Description = "Authentication REST API built with ASP.NET Core 8 and PostgreSQL",
-        Contact = new OpenApiContact
+        // Resolves the real client IP — works behind proxies too
+        static string GetClientIp(HttpContext ctx) =>
+            ctx.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+            ?? ctx.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+
+        // 1. Login: 5 attempts / minute / IP
+        options.AddPolicy("login", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        // 2. Register: 3 attempts / 5 minutes / IP
+        options.AddPolicy("register", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 3,
+                    Window = TimeSpan.FromMinutes(5),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        // 3. Forgot Password: 3 attempts / 15 minutes / IP
+        options.AddPolicy("forgot-password", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 3,
+                    Window = TimeSpan.FromMinutes(15),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        // 4. Global fallback: 60 requests / minute / IP
+        options.AddPolicy("global", ctx =>
+            RateLimitPartition.GetFixedWindowLimiter(GetClientIp(ctx),
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 60,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                }));
+
+        // Consistent 429 JSON body — matches the rest of the API's ApiResponse<T> envelope
+        options.OnRejected = async (context, cancellationToken) =>
         {
-            Name = "Abdelrahman Kamel",
-            Email = "abdelrahman.kamel.elgendy@gmail.com",
-            Url = new Uri("https://github.com/abdelrahman-kamel-elgendy")
-        }
+            context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+            context.HttpContext.Response.ContentType = "application/json";
+
+            if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+                context.HttpContext.Response.Headers.RetryAfter =
+                    ((int)retryAfter.TotalSeconds).ToString();
+
+            await context.HttpContext.Response.WriteAsJsonAsync(
+                new ApiResponse<object>(
+                    HttpStatusCode.TooManyRequests,
+                    false,
+                    "Too many requests. Please slow down and try again later.",
+                    "Rate limit exceeded."
+                ),
+                cancellationToken
+            );
+        };
     });
 
-    options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        Description = "Enter 'Bearer {your_token}'",
-        Name = "Authorization",
-        In = ParameterLocation.Header,
-        Type = SecuritySchemeType.Http,
-        Scheme = "Bearer",
-        BearerFormat = "JWT"
-    });
+    // == Controllers ===============================================================
+    builder.Services.AddControllers();
+    builder.Services.AddEndpointsApiExplorer();
 
-    options.AddSecurityRequirement(new OpenApiSecurityRequirement
+    // == Swagger ===================================================================
+    builder.Services.AddSwaggerGen(options =>
     {
+        options.SwaggerDoc("v1", new OpenApiInfo
+        {
+            Title = "AuthCore API",
+            Version = "v1",
+            Description = "Authentication REST API built with ASP.NET Core 8 and PostgreSQL",
+            Contact = new OpenApiContact
+            {
+                Name = "Abdelrahman Kamel",
+                Email = "abdelrahman.kamel.elgendy@gmail.com",
+                Url = new Uri("https://github.com/abdelrahman-kamel-elgendy")
+            }
+        });
+
+        options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+        {
+            Description = "Enter 'Bearer {your_token}'",
+            Name = "Authorization",
+            In = ParameterLocation.Header,
+            Type = SecuritySchemeType.Http,
+            Scheme = "Bearer",
+            BearerFormat = "JWT"
+        });
+
+        options.AddSecurityRequirement(new OpenApiSecurityRequirement
+        {
         {
             new OpenApiSecurityScheme
             {
@@ -177,139 +196,172 @@ builder.Services.AddSwaggerGen(options =>
             },
             Array.Empty<string>()
         }
+        });
     });
-});
 
-// == Database ==================================================================
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
+    // == Database ==================================================================
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseNpgsql(builder.Configuration.GetConnectionString("PostgreSQL")));
 
-// == Identity ==================================================================
-builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
-{
-    options.Password.RequireDigit = true;
-    options.Password.RequiredLength = 8;
-    options.Password.RequireNonAlphanumeric = true;
-    options.Password.RequireUppercase = true;
-    options.Password.RequireLowercase = true;
-
-    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
-    options.Lockout.MaxFailedAccessAttempts = 5;
-    options.Lockout.AllowedForNewUsers = true;
-
-    options.User.RequireUniqueEmail = true;
-    options.SignIn.RequireConfirmedEmail = true;
-})
-.AddEntityFrameworkStores<ApplicationDbContext>()
-.AddDefaultTokenProviders();
-
-builder.Services.Configure<DataProtectionTokenProviderOptions>(opt =>
-    opt.TokenLifespan = TimeSpan.FromHours(2));
-
-// == JWT Authentication ========================================================
-// Read JWT config from the already-validated JwtConfigs — no raw string access.
-var jwtConfigs = builder.Configuration
-    .GetSection(JwtConfigs.SectionName)
-    .Get<JwtConfigs>()
-    ?? throw new InvalidOperationException("JwtConfigs could not be loaded.");
-
-builder.Services.AddAuthentication(options =>
-{
-    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-})
-.AddJwtBearer(options =>
-{
-    options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
-    options.SaveToken = true;
-
-    options.TokenValidationParameters = new TokenValidationParameters
+    // == Identity ==================================================================
+    builder.Services.AddIdentity<UserModel, IdentityRole>(options =>
     {
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfigs.SecretKey)),
-        ValidateIssuer = true,
-        ValidIssuer = jwtConfigs.ValidIssuer,
-        ValidateAudience = true,
-        ValidAudience = jwtConfigs.ValidAudience,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.Zero
-    };
+        options.Password.RequireDigit = true;
+        options.Password.RequiredLength = 8;
+        options.Password.RequireNonAlphanumeric = true;
+        options.Password.RequireUppercase = true;
+        options.Password.RequireLowercase = true;
 
-    options.Events = new JwtBearerEvents
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.AllowedForNewUsers = true;
+
+        options.User.RequireUniqueEmail = true;
+        options.SignIn.RequireConfirmedEmail = true;
+    })
+    .AddEntityFrameworkStores<ApplicationDbContext>()
+    .AddDefaultTokenProviders();
+
+    builder.Services.Configure<DataProtectionTokenProviderOptions>(opt =>
+        opt.TokenLifespan = TimeSpan.FromHours(2));
+
+    // == JWT Authentication ========================================================
+    // Read JWT config from the already-validated JwtConfigs — no raw string access.
+    var jwtConfigs = builder.Configuration
+        .GetSection(JwtConfigs.SectionName)
+        .Get<JwtConfigs>()
+        ?? throw new InvalidOperationException("JwtConfigs could not be loaded.");
+
+    builder.Services.AddAuthentication(options =>
     {
-        OnChallenge = async context =>
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.RequireHttpsMetadata = !builder.Environment.IsDevelopment();
+        options.SaveToken = true;
+
+        options.TokenValidationParameters = new TokenValidationParameters
         {
-            context.HandleResponse();
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtConfigs.SecretKey)),
+            ValidateIssuer = true,
+            ValidIssuer = jwtConfigs.ValidIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtConfigs.ValidAudience,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero
+        };
 
-            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-            context.Response.ContentType = "application/json";
+        options.Events = new JwtBearerEvents
+        {
+            OnChallenge = async context =>
+            {
+                context.HandleResponse();
 
-            var message = context.AuthenticateFailure?.Message
-                       ?? "You are not authorized to access this resource.";
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.Response.ContentType = "application/json";
 
-            await context.Response.WriteAsJsonAsync(
-                new ApiResponse<object>(HttpStatusCode.Unauthorized, false, message, null)
-            );
-        }
-    };
-});
+                var message = context.AuthenticateFailure?.Message
+                           ?? "You are not authorized to access this resource.";
 
-// == Repositories & Services ===================================================
-builder.Services.AddScoped<IAuthRepository, AuthRepository>();
-builder.Services.AddScoped<IAuthService, AuthService>();
-builder.Services.AddScoped<IUserService, UserService>();
-builder.Services.AddScoped<IAdminService, AdminService>();
-builder.Services.AddScoped<IEmailService, EmailService>();
+                await context.Response.WriteAsJsonAsync(
+                    new ApiResponse<object>(HttpStatusCode.Unauthorized, false, message, null)
+                );
+            }
+        };
+    });
 
-// == Build =====================================================================
-var app = builder.Build();
+    // == Repositories & Services ===================================================
+    builder.Services.AddScoped<IAuthRepository, AuthRepository>();
+    builder.Services.AddScoped<IAuthService, AuthService>();
+    builder.Services.AddScoped<IUserService, UserService>();
+    builder.Services.AddScoped<IAdminService, AdminService>();
+    builder.Services.AddScoped<IEmailService, EmailService>();
 
-// ── Middleware pipeline (order is significant) ────────────────────────────────
-// 1. Global exception handler — must be outermost to catch everything
-app.UseMiddleware<ExceptionHandlingMiddleware>();
+    // == Build =====================================================================
+    var app = builder.Build();
 
-// 2. Security headers — applied to every response
-app.UseMiddleware<SecurityHeadersMiddleware>();
+    // == Log every HTTP request automatically =============================
+    // Place this early in the pipeline — before auth, after forwarded headers
+    app.UseSerilogRequestLogging(options =>
+    {
+        options.MessageTemplate =
+            "HTTP {RequestMethod} {RequestPath} responded {StatusCode} in {Elapsed:0.0000}ms";
 
-// 3. Forwarded headers — must resolve real IP before rate limiter reads it
-app.UseForwardedHeaders();
+        // Enrich request logs with additional context
+        options.EnrichDiagnosticContext = (diagnosticContext, httpContext) =>
+        {
+            diagnosticContext.Set("RequestHost", httpContext.Request.Host.Value);
+            diagnosticContext.Set("RequestScheme", httpContext.Request.Scheme);
+            diagnosticContext.Set("UserAgent", httpContext.Request.Headers.UserAgent.ToString());
+            diagnosticContext.Set("ClientIP",
+                httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault()
+                ?? httpContext.Connection.RemoteIpAddress?.ToString());
+        };
+    });
 
-// 4. Rate limiting — applied before auth so all requests are covered
-app.UseRateLimiter();
+    // == Middleware pipeline (order is significant) ================================
+    // 1. Global exception handler — must be outermost to catch everything
+    app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-// 5. HTTPS redirect — skipped in development
-if (!app.Environment.IsDevelopment())
-    app.UseHttpsRedirection();
+    // 2. Security headers — applied to every response
+    app.UseMiddleware<SecurityHeadersMiddleware>();
 
-// 6. Swagger — development only
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AuthCore API v1"));
+    // 3. Forwarded headers — must resolve real IP before rate limiter reads it
+    app.UseForwardedHeaders();
+    
+    // 4. Logging
+    app.UseSerilogRequestLogging();
+
+    // 5. Rate limiting — applied before auth so all requests are covered
+    app.UseRateLimiter();
+
+    // 6. HTTPS redirect — skipped in development
+    if (!app.Environment.IsDevelopment())
+        app.UseHttpsRedirection();
+
+    // 7. Swagger — development only
+    if (app.Environment.IsDevelopment())
+    {
+        app.UseSwagger();
+        app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "AuthCore API v1"));
+    }
+
+    // 8. Auth
+    app.UseAuthentication();
+    app.UseAuthorization();
+
+    app.MapControllers();
+
+    // == Migrate DB & Seed on startup ==============================================
+    using (var scope = app.Services.CreateScope())
+    {
+        var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>();
+
+        await db.Database.MigrateAsync();
+
+        foreach (var role in new[] { "Admin", "User" })
+            if (!await roleManager.RoleExistsAsync(role))
+                await roleManager.CreateAsync(new IdentityRole(role));
+
+        // Pass IOptions<SeedConfigs> instead of raw IConfiguration
+        var seedConfigs = scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>();
+        await DbSeeder.SeedAsync(userManager, seedConfigs.Value);
+    }
+
+    app.Run();
 }
-
-// 7. Auth
-app.UseAuthentication();
-app.UseAuthorization();
-
-app.MapControllers();
-
-// == Migrate DB & Seed on startup ==============================================
-using (var scope = app.Services.CreateScope())
+catch (Exception ex) when (ex is not HostAbortedException)
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>();
-
-    await db.Database.MigrateAsync();
-
-    foreach (var role in new[] { "Admin", "User" })
-        if (!await roleManager.RoleExistsAsync(role))
-            await roleManager.CreateAsync(new IdentityRole(role));
-
-    // Pass IOptions<SeedConfigs> instead of raw IConfiguration
-    var seedConfigs = scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>();
-    await DbSeeder.SeedAsync(userManager, seedConfigs.Value);
+    // Catches fatal startup errors and writes them to the log
+    Log.Fatal(ex, "Application terminated unexpectedly during startup.");
 }
-
-app.Run();
+finally
+{
+    // Ensures all buffered log entries are flushed before the process exits
+    Log.CloseAndFlush();
+}

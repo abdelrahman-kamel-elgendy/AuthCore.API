@@ -7,16 +7,10 @@ using AuthCore.API.Services.Interfaces;
 
 namespace AuthCore.API.Services;
 
-public class UserService : IUserService
+public class UserService(IAuthRepository authRepository, ILogger<UserService> logger) : IUserService
 {
-    private readonly IAuthRepository _authRepository;
-    private readonly ILogger<UserService> _logger;
-
-    public UserService(IAuthRepository authRepository, ILogger<UserService> logger)
-    {
-        _authRepository = authRepository;
-        _logger = logger;
-    }
+    private readonly IAuthRepository _authRepository = authRepository;
+    private readonly ILogger<UserService> _logger = logger;
 
     public async Task<ProfileDto> GetProfileAsync(string userId)
     {

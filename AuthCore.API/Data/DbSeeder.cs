@@ -6,10 +6,6 @@ namespace AuthCore.API.Data;
 
 public static class DbSeeder
 {
-    /// <summary>
-    /// Seeds the admin account on every startup.
-    /// If the admin already exists, this is a no-op.
-    /// </summary>
     public static async Task SeedAsync(UserManager<UserModel> userManager, SeedConfigs configs)
     {
         var admin = configs.Admin;
@@ -20,7 +16,7 @@ public static class DbSeeder
 
         var adminUser = new UserModel
         {
-            UserName = admin.UserName,
+            UserName = admin.Username,
             Email = admin.Email,
             FirstName = admin.FirstName,
             LastName = admin.LastName,

@@ -2,24 +2,16 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AuthCore.API.Models;
 
-public class PagedList<T>
+public class PagedList<T>(List<T> items, int totalCount, int pageNumber, int pageSize)
 {
-    public List<T> Items { get; set; }
-    public int PageNumber { get; set; }
-    public int PageSize { get; set; }
-    public int TotalCount { get; set; }
+    public List<T> Items { get; set; } = items;
+    public int PageNumber { get; set; } = pageNumber;
+    public int PageSize { get; set; } = pageSize;
+    public int TotalCount { get; set; } = totalCount;
 
     public int TotalPages => (int)Math.Ceiling(TotalCount / (double)PageSize);
     public bool HasPreviousPage => PageNumber > 1;
     public bool HasNextPage => PageNumber < TotalPages;
-
-    public PagedList(List<T> items, int totalCount, int pageNumber, int pageSize)
-    {
-        Items = items;
-        TotalCount = totalCount;
-        PageNumber = pageNumber;
-        PageSize = pageSize;
-    }
 
     public static async Task<PagedList<T>> CreateAsync(
         IQueryable<T> source, int pageNumber, int pageSize)

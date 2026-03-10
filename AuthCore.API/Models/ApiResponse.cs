@@ -18,8 +18,8 @@ public class ApiResponse<T>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IDictionary<string, string[]>? ValidationErrors { get; set; }
 
-    
-    
+
+
     public ApiResponse(bool success) => Success = success;
 
     public ApiResponse(HttpStatusCode status, bool success, string? message, T? data)

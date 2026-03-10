@@ -5,10 +5,8 @@ using Microsoft.EntityFrameworkCore;
 
 namespace AuthCore.API.Data;
 
-public class ApplicationDbContext : IdentityDbContext<UserModel>
+public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : IdentityDbContext<UserModel>(options)
 {
-    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
-
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
