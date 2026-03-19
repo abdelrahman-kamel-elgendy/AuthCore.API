@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
+using Asp.Versioning;
 using AuthCore.API.DTOs;
 using AuthCore.API.DTOs.Auth;
 using AuthCore.API.DTOs.User;
@@ -12,9 +13,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AuthCore.API.Controllers;
 
-[Route("api/[controller]")]
-[ApiController]
 [Authorize]
+[ApiController]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class UserController(IUserService userService) : ControllerBase
 {
     private readonly IUserService _userService = userService;

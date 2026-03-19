@@ -1,6 +1,7 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
+using Asp.Versioning;
 using AuthCore.API.DTOs.Auth;
 using AuthCore.API.Exceptions;
 using AuthCore.API.Models;
@@ -11,8 +12,9 @@ using Microsoft.AspNetCore.RateLimiting;
 
 namespace AuthCore.API.Controllers;
 
-[Route("api/[controller]")]
 [ApiController]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class AuthController(IAuthService authService) : ControllerBase
 {
     private readonly IAuthService _authService = authService;

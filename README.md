@@ -39,90 +39,77 @@ A production-ready authentication REST API built with **ASP.NET Core 8** and **P
 
 ## Project Structure
 
-```
-AuthCore.API/
-├── Controllers/
-│   ├── AuthController.cs              # Register, Login, Logout, Confirm, ForgotPassword, ResetPassword
-│   ├── UserController.cs              # GetProfile, UpdateProfile, ChangePassword
-│   └── AdminController.cs             # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
-│
-├── Configs/                           # Strongly-typed configuration classes
-│   ├── AppConfigs.cs                  # App__BaseUrl
-│   ├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
-│   ├── RedisConfigs.cs                # Redis__ConnectionString
-│   ├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
-│   └── SeedConfigs.cs                 # Seed__Admin__* values
-│
-├── Data/
-│   ├── ApplicationDbContext.cs
-│   ├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
-│   └── Migrations/                    # EF Core migrations
-│
-├── DTOs/
-│   ├── Auth/
-│   │   ├── AuthResponseDto.cs
-│   │   ├── ConfirmEmailRequestDto.cs
-│   │   ├── ForgotPasswordRequestDto.cs
-│   │   ├── LoginRequestDto.cs
-│   │   ├── RefreshTokenRequestDto.cs
-│   │   ├── RegisterRequestDto.cs
-│   │   └── ResetPasswordRequestDto.cs
-│   └── User/
-│       ├── UserResponseDto.cs
-│       ├── ChangePasswordRequestDto.cs
-│       └── UpdateProfileRequestDto.cs
-│
-├── Exceptions/
-│   ├── ApiException.cs                # Abstract base
-│   └── CustomExceptions.cs            # 400, 401, 403, 404, 409 exception types
-│
-├── HealthChecks/
-│   └── SmtpHealthCheck.cs             # TCP probe — verifies SMTP host:port is reachable
-│
-├── Middlewares/
-│   ├── ExceptionHandlingMiddleware.cs # Maps exceptions to consistent ApiResponse<T> errors
-│   └── SecurityHeadersMiddleware.cs   # Injects security headers on every response
-│
-├── Models/
-│   ├── ApiResponse.cs
-│   ├── PagedList.cs
-│   ├── PaginationMetadata.cs
-│   └── UserModel.cs
-│
-├── Repositories/
-│   ├── IAuthRepository.cs
-│   └── AuthRepository.cs
-│
-├── Services/
-│   ├── Interfaces/
-│   │   ├── IAdminService.cs
-│   │   ├── IAuthService.cs
-│   │   ├── IEmailService.cs
-│   │   ├── ITokenBlacklistService.cs  # RevokeAsync + IsRevokedAsync
-│   │   └── IUserService.cs
-│   ├── AdminService.cs
-│   ├── AuthService.cs
-│   ├── EmailService.cs
-│   ├── EmailTemplateService.cs
-│   └── TokenBlacklistService.cs       # Redis implementation — O(1) lookup, auto TTL expiry
-│
-├── Templates/
-│   └── Email/
-│       ├── ConfirmEmail.html          # Sent on register
-│       ├── ResetPassword.html         # Sent on forgot-password
-│       └── WelcomeEmail.html          # Sent after email confirmed
-│
-├── .env                               # ⚠️ Secrets: gitignored
-├── .env.example                       # ✅ Template: safe to commit
-├── .env.docker                        # ⚠️ Docker secrets: gitignored
-├── .env.docker.example                # ✅ Docker template: safe to commit
-├── .dockerignore
-├── NuGet.config                       # Clears Windows-specific fallback paths for Docker builds
-├── appsettings.json                   # Serilog configuration + app settings
-├── AuthCore.API.csproj
-├── docker-compose.yml
-├── Dockerfile
-└── Program.cs
+```Controllers/
+├── AuthController.cs              # Register, Login, Logout, Confirm, ForgotPassword, ResetPassword
+├── UserController.cs              # GetProfile, UpdateProfile, ChangePassword
+└── AdminController.cs             # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
+Configs/                           # Strongly-typed configuration classes
+├── AppConfigs.cs                  # App__BaseUrl
+├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
+├── RedisConfigs.cs                # Redis__ConnectionString
+├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
+└── SeedConfigs.cs                 # Seed__Admin__* values
+Data/
+├── ApplicationDbContext.cs
+├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
+└── Migrations/                    # EF Core migrations
+DTOs/
+├── Auth/
+│   ├── AuthResponseDto.cs
+│   ├── ConfirmEmailRequestDto.cs
+│   ├── ForgotPasswordRequestDto.cs
+│   ├── LoginRequestDto.cs
+│   ├── RefreshTokenRequestDto.cs
+│   ├── RegisterRequestDto.cs
+│   └── ResetPasswordRequestDto.cs
+└── User/
+    ├── UserResponseDto.cs
+    ├── ChangePasswordRequestDto.cs
+    └── UpdateProfileRequestDto.cs
+Exceptions/
+├── ApiException.cs                # Abstract base
+└── CustomExceptions.cs            # 400, 401, 403, 404, 409 exception types
+HealthChecks/
+└── SmtpHealthCheck.cs             # TCP probe — verifies SMTP host:port is reachable
+Middlewares/
+├── ExceptionHandlingMiddleware.cs # Maps exceptions to consistent ApiResponse<T> errors
+└── SecurityHeadersMiddleware.cs   # Injects security headers on every response
+Models/
+├── ApiResponse.cs
+├── PagedList.cs
+├── PaginationMetadata.cs
+└── UserModel.cs
+Repositories/
+├── IAuthRepository.cs
+└── AuthRepository.cs
+Services/
+├── Interfaces/
+│   ├── IAdminService.cs
+│   ├── IAuthService.cs
+│   ├── IEmailService.cs
+│   ├── ITokenBlacklistService.cs  # RevokeAsync + IsRevokedAsync
+│   └── IUserService.cs
+├── AdminService.cs
+├── AuthService.cs
+├── EmailService.cs
+├── EmailTemplateService.cs
+└── TokenBlacklistService.cs       # Redis implementation — O(1) lookup, auto TTL expiry
+Templates/
+└── Email/
+    ├── ConfirmEmail.html          # Sent on register
+    ├── ResetPassword.html         # Sent on forgot-password
+    └── WelcomeEmail.html          # Sent after email confirmed
+.env                               # ⚠️ Secrets: gitignored
+.env.example                       # ✅ Template: safe to commit
+.env.docker                        # ⚠️ Docker secrets: gitignored
+.env.docker.example                # ✅ Docker template: safe to commit
+.dockerignore
+NuGet.config                       # Clears Windows-specific fallback paths for Docker builds
+appsettings.json                   # Serilog configuration + app settings
+AuthCore.API.csproj
+docker-compose.yml
+Dockerfile
+Program.cs
 ```
 
 ---
@@ -140,7 +127,6 @@ AuthCore.API/
 #### 1. Clone & restore
 ```bash
 git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
-cd AuthCore.API
 dotnet restore
 ```
 

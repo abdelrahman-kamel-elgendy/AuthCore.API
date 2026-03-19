@@ -1,4 +1,5 @@
 using System.Net;
+using Asp.Versioning;
 using AuthCore.API.DTOs;
 using AuthCore.API.Models;
 using AuthCore.API.Services.Interfaces;
@@ -7,9 +8,10 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace AuthCore.API.Controllers;
 
-[ApiController]
-[Route("api/[controller]")]
 [Authorize(Roles = "Admin")]
+[ApiController]
+[ApiVersion("1.0")]
+[Route("api/v{version:apiVersion}/[controller]")]
 public class AdminController(IAdminService adminService) : ControllerBase
 {
     private readonly IAdminService _adminService = adminService;
