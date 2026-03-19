@@ -70,6 +70,14 @@ public class ExceptionHandlingMiddleware(
                 apiResponse.Message = notImplEx.Message;
                 break;
 
+            case TooManyRequestsException tooManyEx:
+                response.StatusCode = (int)HttpStatusCode.TooManyRequests;
+                apiResponse.Status = HttpStatusCode.TooManyRequests;
+                apiResponse.Message = tooManyEx.Message;
+                if (tooManyEx.RetryAfterSeconds > 0)
+                    response.Headers.RetryAfter = tooManyEx.RetryAfterSeconds.ToString();
+                break;
+
             default:
                 response.StatusCode = (int)HttpStatusCode.InternalServerError;
                 apiResponse.Status = HttpStatusCode.InternalServerError;

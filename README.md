@@ -79,7 +79,7 @@ AuthCore.API/
 ├── HealthChecks/
 │   └── SmtpHealthCheck.cs             # TCP probe — verifies SMTP host:port is reachable
 │
-├── Middleware/
+├── Middlewares/
 │   ├── ExceptionHandlingMiddleware.cs # Maps exceptions to consistent ApiResponse<T> errors
 │   └── SecurityHeadersMiddleware.cs   # Injects security headers on every response
 │

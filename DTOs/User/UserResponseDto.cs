@@ -13,7 +13,9 @@ public class UserResponseDto
     public DateTime? BirthDate { get; set; }
     public bool EmailConfirmed { get; set; }
     public bool IsActive { get; set; }
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
     public DateTime CreatedAt { get; set; }
-    public DateTime UpdatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
     public List<string>? Roles { get; set; }
 }

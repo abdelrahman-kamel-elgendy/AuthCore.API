@@ -6,15 +6,15 @@ services:
     container_name: authcore-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_DB:       AuthCoreDB
-      POSTGRES_USER:     postgres
+      POSTGRES_DB: AuthCoreDB
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d AuthCoreDB"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d AuthCoreDB" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -22,15 +22,15 @@ services:
 
   # == Redis ====================================================================
   redis:
-    image: redis:7-alpine           # alpine variant — ~30MB
+    image: redis:7-alpine # alpine variant — ~30MB
     container_name: authcore-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"                 # expose to host for local inspection (redis-cli)
+      - "6379:6379" # expose to host for local inspection (redis-cli)
     volumes:
-      - redis_data:/data            # persists data across container restarts
+      - redis_data:/data # persists data across container restarts
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -45,9 +45,9 @@ services:
     restart: unless-stopped
     depends_on:
       postgres:
-        condition: service_healthy  # wait for postgres
+        condition: service_healthy # wait for postgres
       redis:
-        condition: service_healthy  # wait for redis
+        condition: service_healthy # wait for redis
     ports:
       - "8080:8080"
     environment:
@@ -64,29 +64,39 @@ services:
       JWT__AccessTokenExpiryMinutes: "${JWT_ACCESS_EXPIRY_MINUTES:-60}"
       JWT__RefreshTokenExpiryDays: "${JWT_REFRESH_EXPIRY_DAYS:-7}"
 
+      # Rate Limiting
+      RateLimit__Login__PermitLimit: "5"
+      RateLimit__Login__WindowMinutes: "1"
+      RateLimit__Register__PermitLimit: "3"
+      RateLimit__Register__WindowMinutes: "5"
+      RateLimit__ForgotPassword__PermitLimit: "3"
+      RateLimit__ForgotPassword__WindowMinutes: "15"
+      RateLimit__Global__PermitLimit: "60"
+      RateLimit__Global__WindowMinutes: "1"
+
       # App
-      App__BaseUrl:                  ${APP_BASE_URL}
+      App__BaseUrl: ${APP_BASE_URL}
 
       # SMTP
-      Smtp__Host:                    ${SMTP_HOST}
-      Smtp__Port:                    ${SMTP_PORT:-587}
-      Smtp__Username:                ${SMTP_USERNAME}
-      Smtp__Password:                ${SMTP_PASSWORD}
-      Smtp__FromName:                ${SMTP_FROM_NAME:-AuthCore}
-      Smtp__EnableSsl:               ${SMTP_ENABLE_SSL:-true}
+      Smtp__Host: ${SMTP_HOST}
+      Smtp__Port: ${SMTP_PORT:-587}
+      Smtp__Username: ${SMTP_USERNAME}
+      Smtp__Password: ${SMTP_PASSWORD}
+      Smtp__FromName: ${SMTP_FROM_NAME:-AuthCore}
+      Smtp__EnableSsl: ${SMTP_ENABLE_SSL:-true}
 
       # Seed
-      Seed__Admin__Email:            ${SEED_ADMIN_EMAIL}
-      Seed__Admin__Password:         ${SEED_ADMIN_PASSWORD}
-      Seed__Admin__FirstName:        ${SEED_ADMIN_FIRSTNAME}
-      Seed__Admin__LastName:         ${SEED_ADMIN_LASTNAME}
-      Seed__Admin__UserName:         ${SEED_ADMIN_USERNAME}
+      Seed__Admin__Email: ${SEED_ADMIN_EMAIL}
+      Seed__Admin__Password: ${SEED_ADMIN_PASSWORD}
+      Seed__Admin__FirstName: ${SEED_ADMIN_FIRSTNAME}
+      Seed__Admin__LastName: ${SEED_ADMIN_LASTNAME}
+      Seed__Admin__UserName: ${SEED_ADMIN_USERNAME}
 
       # Runtime
-      ASPNETCORE_ENVIRONMENT:        ${ASPNETCORE_ENVIRONMENT:-Production}
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
 
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:8080/health || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -94,4 +104,4 @@ services:
 
 volumes:
   postgres_data:
-  redis_data:                       # named volume — Redis data persists across restarts
+  redis_data: # named volume — Redis data persists across restarts

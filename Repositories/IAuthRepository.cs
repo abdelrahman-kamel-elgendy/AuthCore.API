@@ -12,7 +12,14 @@ public interface IAuthRepository
     Task<bool> CheckPasswordAsync(UserModel user, string password);
     Task<IdentityResult> CreateUserAsync(UserModel user, string password);
     Task<IdentityResult> UpdateUserAsync(UserModel user);
-    Task<IdentityResult> DeleteUserAsync(UserModel user);
+    Task<IdentityResult> DeleteUserAsync(UserModel user);        // hard delete — kept for internal use
+    Task SoftDeleteUserAsync(UserModel user);                    // sets IsDeleted + DeletedAt
+    Task RestoreUserAsync(UserModel user);                       // clears IsDeleted + DeletedAt
+    Task<UserModel?> GetDeletedUserByIdAsync(string userId);     // bypasses global query filter
+
+    // Paginated queries (used by AdminService — keeps DbContext out of the service layer)
+    Task<(List<UserModel> Users, int Total)> GetAllUsersPagedAsync(int pageNumber, int pageSize);
+    Task<(List<UserModel> Users, int Total)> GetDeletedUsersPagedAsync(int pageNumber, int pageSize);
 
     // Role management
     Task<IList<string>> GetUserRolesAsync(UserModel user);

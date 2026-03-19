@@ -17,6 +17,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             entity.Property(u => u.ProfileURL).HasMaxLength(200);
             entity.Property(u => u.Address).HasMaxLength(200);
             entity.Property(u => u.RefreshToken).HasMaxLength(512);
+
+            entity.HasQueryFilter(u => !u.IsDeleted);
         });
     }
 }

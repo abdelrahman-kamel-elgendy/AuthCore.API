@@ -14,4 +14,7 @@ public class UserModel : IdentityUser
     public bool IsActive { get; set; } = true;
     public string? RefreshToken { get; set; }
     public DateTime RefreshTokenExpiryTime { get; set; }
+
+    public bool IsDeleted { get; set; } = false;
+    public DateTime? DeletedAt { get; set; }
 }
