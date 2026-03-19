@@ -352,11 +352,9 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // == Migrate DB & Seed on startup ==============================================
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-
     await DbSeeder.SeedAsync(
         scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>(),
-        db,
+        scope.ServiceProvider.GetRequiredService<ApplicationDbContext>(),
         scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>().Value,
         scope.ServiceProvider.GetRequiredService<ILogger<Program>>());
 }

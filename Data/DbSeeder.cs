@@ -15,6 +15,10 @@ public static class DbSeeder
         SeedConfigs configs,
         ILogger logger)
     {
+
+        logger.LogInformation("DbSeeder: Database migrating...");
+        await db.Database.MigrateAsync();
+
         var admin = configs.Admin;
 
         logger.LogInformation("DbSeeder: Database seeding...");
