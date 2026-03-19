@@ -1,3 +1,4 @@
+// AuthCore.API/Data/DbSeeder.cs
 using AuthCore.API.Configs;
 using AuthCore.API.Models;
 using Microsoft.AspNetCore.Identity;
@@ -16,7 +17,7 @@ public static class DbSeeder
     {
         var admin = configs.Admin;
 
-        logger.LogInformation("DbSeeder: Data base seeding...");
+        logger.LogInformation("DbSeeder: Database seeding...");
         logger.LogInformation("DbSeeder: checking if admin {Email} exists...", admin.Email);
         var adminExists = await db.Users
             .IgnoreQueryFilters()
@@ -43,7 +44,6 @@ public static class DbSeeder
         var result = await userManager.CreateAsync(adminUser, admin.Password);
         if (!result.Succeeded)
             throw new InvalidOperationException($"Admin seeding failed: {string.Join(", ", result.Errors.Select(e => e.Description))}");
-
 
         await userManager.AddToRoleAsync(adminUser, "Admin");
 

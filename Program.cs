@@ -353,17 +353,12 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
-    var userManager = scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>();
 
-    await db.Database.MigrateAsync();
-
-    foreach (var role in new[] { "Admin", "User" })
-        if (!await roleManager.RoleExistsAsync(role))
-            await roleManager.CreateAsync(new IdentityRole(role));
-
-    var seedConfigs = scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>();
-    await DbSeeder.SeedAsync(userManager, seedConfigs.Value);
+    await DbSeeder.SeedAsync(
+        scope.ServiceProvider.GetRequiredService<UserManager<UserModel>>(),
+        db,
+        scope.ServiceProvider.GetRequiredService<IOptions<SeedConfigs>>().Value,
+        scope.ServiceProvider.GetRequiredService<ILogger<Program>>());
 }
 
 app.Run();
