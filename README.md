@@ -37,7 +37,7 @@ Other microservices in your system verify tokens issued by AuthCore without call
 ## Architecture
 
 AuthCore.API follows **Clean Architecture** with strict layer separation:
-![AuthCore Clean Architecture](authcore_clean_architecture.svg)
+![AuthCore Clean Architecture](/docs/authcore_clean_architecture.svg)
 
 **Key patterns used:**
 - CQRS with MediatR — commands and queries are fully separated
@@ -317,22 +317,7 @@ All endpoints return a consistent envelope:
 
 ### Login & token refresh
 
-```
-Client                          AuthCore.API                    PostgreSQL
-  │                                  │                               │
-  │─── POST /auth/login ────────────►│                               │
-  │                                  │──── Verify user + password ──►│
-  │                                  │◄─── User record ──────────────│
-  │◄── { accessToken, refreshToken }─│                               │
-  │                                  │                               │
-  │  (15 min later, access expires)  │                               │
-  │                                  │                               │
-  │─── POST /tokens/refresh ────────►│                               │
-  │    { refreshToken }              │──── Validate + rotate ────────►│
-  │                                  │◄─── New token stored ─────────│
-  │◄── { new accessToken,           ─│                               │
-  │      new refreshToken }          │                               │
-```
+![Login Token Refresh Sequence](/docs/login_token_refresh_sequence.svg)
 
 ### Token verification in other services
 
