@@ -1,537 +1,458 @@
-<div align="center">
+# AuthCore.API
 
-# 🔐 AuthCore.API
+A production-ready **User Authentication & Management Microservice** built with .NET Core 8 and PostgreSQL, designed to be integrated into a microservices architecture. Handles everything from user registration and login to role-based access control, profile management, and token lifecycle.
 
-[![.NET](https://img.shields.io/badge/.NET-8.0-purple)](https://dotnet.microsoft.com)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-14+-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org)
-[![Redis](https://img.shields.io/badge/Redis-7-DC382D?logo=redis&logoColor=white)](https://redis.io)
-[![JWT](https://img.shields.io/badge/Auth-JWT-orange)](https://jwt.io)
-[![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
+---
 
-A production-ready authentication REST API built with **ASP.NET Core 8** and **PostgreSQL**. Handles the full auth lifecycle, registration, email confirmation, login, JWT + refresh token rotation on logout, password management, user profiles, and admin controls.
+## Table of Contents
 
-</div>
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+  - [Prerequisites](#prerequisites)
+  - [Run with Docker](#run-with-docker)
+  - [Run Locally](#run-locally)
+- [Configuration](#configuration)
+- [API Endpoints](#api-endpoints)
+- [Authentication Flow](#authentication-flow)
+- [Database Migrations](#database-migrations)
+- [Background Jobs](#background-jobs)
+- [Testing](#testing)
+- [Integration with Other Services](#integration-with-other-services)
+- [Roadmap](#roadmap)
+
+---
+
+## Overview
+
+AuthCore.API is a standalone, containerized microservice responsible for all identity concerns in your platform. It issues and validates JWT access tokens, manages refresh token rotation, handles password recovery via email OTP, and exposes admin endpoints for user and role management.
+
+Other microservices in your system verify tokens issued by AuthCore without calling back into it — keeping the auth flow stateless and fast.
+
+---
+
+## Architecture
+
+AuthCore.API follows **Clean Architecture** with strict layer separation:
+![AuthCore Clean Architecture](authcore_clean_architecture.svg)
+
+**Key patterns used:**
+- CQRS with MediatR — commands and queries are fully separated
+- Repository + Unit of Work — infrastructure details are hidden behind interfaces
+- Pipeline behaviours — validation, logging, and performance monitoring applied cross-cutting
+- Domain events — `UserRegisteredEvent`, `PasswordResetRequestedEvent` are raised inside aggregates and can be published to a message broker for other services to consume
 
 ---
 
 ## Features
 
-- **JWT Authentication**: access tokens signed with HS256, expire after 1 hour with zero clock skew tolerance; refresh tokens are cryptographically random 64-byte values, rotated on every use and expired after 7 days
-- **Redis Token Blacklist**: revoked access tokens are stored in Redis with automatic TTL expiration matching the token's remaining lifetime; every authenticated request checks Redis via an O(1) `EXISTS` call — no database query; keys are cleaned up automatically when the token would have expired naturally, with no maintenance job required
-- **Refresh Token Rotation**: every `/refresh-token` call invalidates the old token and issues a new one; reuse of a consumed token is detected and rejected
-- **Email Confirmation**: account login is blocked until the email address is verified; confirmation and welcome emails are sent automatically using dark-themed HTML templates
-- **Forgot / Reset Password**: time-limited reset links sent via email; successful reset immediately revokes all active refresh tokens across all devices
-- **Role-Based Authorization**: `Admin` and `User` roles enforced at the controller level via `[Authorize(Roles = "...")]`; roles and the default admin account are seeded on every startup
-- **Admin Controls**: paginated user management with promote/demote, activate/deactivate, and hard delete; deactivation immediately revokes all tokens and blocks future logins
-- **Rate Limiting**: per-IP fixed-window limits on sensitive endpoints (`5/min` login, `3/5min` register, `3/15min` forgot-password) using .NET 8's built-in `RateLimiter`; all rejections return a consistent `429` body with a `Retry-After` header
-- **Security Headers**: `SecurityHeadersMiddleware` injects `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, and `Permissions-Policy` on every response; CSP is relaxed automatically for Swagger in development
-- **Structured Logging**: Serilog replaces the default logger with configurable sinks (Console, File, Seq); every request is logged with method, path, status code, duration, client IP, and user agent via `UseSerilogRequestLogging`; Swagger traffic is silenced at `Verbose` level
-- **Health Checks**: `GET /health` reports live status of PostgreSQL and SMTP; returns `200` when all dependencies are healthy, `503` when any fail; response includes per-check status and duration in JSON
-- **Docker Support**: multi-stage `Dockerfile` produces a minimal runtime image (~200MB); `docker-compose.yml` orchestrates API + PostgreSQL + Redis with health-check gating so the API never starts before all dependencies are ready
-- **Strongly-Typed Configuration**: all environment variables are bound to validated settings classes (`JwtConfigs`, `SmtpConfigs`, `SeedConfigs`, `AppConfigs`, `RedisConfigs`) with `.ValidateOnStart()`; the app refuses to start if any required value is missing or invalid
-- **Consistent API Envelope**: every response, including `401`, `429`, and validation errors, returns the same `ApiResponse<T>` JSON structure; no endpoint ever returns a blank body
-- **Global Exception Handling**: `ExceptionHandlingMiddleware` maps all custom exception types to their correct HTTP status codes; stack traces are only exposed in `Development`
-- **Account Security**: 5 failed login attempts trigger a 15-minute lockout; password policy enforces minimum length, mixed case, digits, and special characters
-- **Proxy-Aware**: `ForwardedHeadersMiddleware` resolves real client IPs from `X-Forwarded-For` so rate limiting and logging work correctly behind Nginx or Cloudflare
-- **Swagger UI**: fully documented with Bearer token support at `/swagger`; only exposed in `Development`
+### Authentication
+- User registration with email verification
+- Login with JWT access token + refresh token pair
+- Forgot password — sends a reset link via email
+- Reset password with OTP/token validation
+- Refresh token rotation (old token invalidated on each refresh)
+- Logout with single-token or all-device token revocation
+
+### Profile Management
+- View and update profile (name, avatar)
+- Change password (requires current password)
+- Upload avatar
+- Delete account (soft delete)
+
+### Admin Panel
+- List all users with pagination and filtering
+- View detailed user profile
+- Assign and revoke roles
+- Ban and unban users
+- View active sessions per user
+
+### Token Management
+- List active refresh tokens per user
+- Revoke a specific token
+- Revoke all tokens for a user (force logout everywhere)
+- Automatic cleanup of expired tokens via background job
+
+---
+
+## Tech Stack
+
+| Concern | Technology |
+|---|---|
+| Framework | .NET Core 8 (ASP.NET Web API) |
+| Database | PostgreSQL 16 |
+| ORM | Entity Framework Core 8 + Npgsql |
+| CQRS | MediatR |
+| Validation | FluentValidation |
+| Mapping | AutoMapper |
+| Authentication | JWT Bearer + Refresh Tokens |
+| Password Hashing | BCrypt (via ASP.NET Core Identity) |
+| Email | MailKit (SMTP) |
+| Background Jobs | Hangfire + Hangfire.PostgreSql |
+| Logging | Serilog (console + PostgreSQL sink) |
+| API Docs | Swagger / Swashbuckle |
+| Rate Limiting | AspNetCoreRateLimit |
+| Containerisation | Docker + Docker Compose |
+| Testing | xUnit + Moq + FluentAssertions + Testcontainers |
 
 ---
 
 ## Project Structure
 
-```Controllers/
-├── AuthController.cs              # Register, Login, Logout, Confirm, ForgotPassword, ResetPassword
-├── UserController.cs              # GetProfile, UpdateProfile, ChangePassword
-└── AdminController.cs             # GetAllUsers, GetUser, Promote, Demote, Activate, Deactivate, Delete
-Configs/                           # Strongly-typed configuration classes
-├── AppConfigs.cs                  # App__BaseUrl
-├── JwtConfigs.cs                  # JWT__SecretKey, Issuer, Audience, expiry
-├── RedisConfigs.cs                # Redis__ConnectionString
-├── SmtpConfigs.cs                 # Smtp__Host, Port, credentials, SSL
-└── SeedConfigs.cs                 # Seed__Admin__* values
-Data/
-├── ApplicationDbContext.cs
-├── DbSeeder.cs                    # Admin seeder: runs on every startup (accepts SeedConfigs)
-└── Migrations/                    # EF Core migrations
-DTOs/
-├── Auth/
-│   ├── AuthResponseDto.cs
-│   ├── ConfirmEmailRequestDto.cs
-│   ├── ForgotPasswordRequestDto.cs
-│   ├── LoginRequestDto.cs
-│   ├── RefreshTokenRequestDto.cs
-│   ├── RegisterRequestDto.cs
-│   └── ResetPasswordRequestDto.cs
-└── User/
-    ├── UserResponseDto.cs
-    ├── ChangePasswordRequestDto.cs
-    └── UpdateProfileRequestDto.cs
-Exceptions/
-├── ApiException.cs                # Abstract base
-└── CustomExceptions.cs            # 400, 401, 403, 404, 409 exception types
-HealthChecks/
-└── SmtpHealthCheck.cs             # TCP probe — verifies SMTP host:port is reachable
-Middlewares/
-├── ExceptionHandlingMiddleware.cs # Maps exceptions to consistent ApiResponse<T> errors
-└── SecurityHeadersMiddleware.cs   # Injects security headers on every response
-Models/
-├── ApiResponse.cs
-├── PagedList.cs
-├── PaginationMetadata.cs
-└── UserModel.cs
-Repositories/
-├── IAuthRepository.cs
-└── AuthRepository.cs
-Services/
-├── Interfaces/
-│   ├── IAdminService.cs
-│   ├── IAuthService.cs
-│   ├── IEmailService.cs
-│   ├── ITokenBlacklistService.cs  # RevokeAsync + IsRevokedAsync
-│   └── IUserService.cs
-├── AdminService.cs
-├── AuthService.cs
-├── EmailService.cs
-├── EmailTemplateService.cs
-└── TokenBlacklistService.cs       # Redis implementation — O(1) lookup, auto TTL expiry
-Templates/
-└── Email/
-    ├── ConfirmEmail.html          # Sent on register
-    ├── ResetPassword.html         # Sent on forgot-password
-    └── WelcomeEmail.html          # Sent after email confirmed
-.env                               # ⚠️ Secrets: gitignored
-.env.example                       # ✅ Template: safe to commit
-.env.docker                        # ⚠️ Docker secrets: gitignored
-.env.docker.example                # ✅ Docker template: safe to commit
-.dockerignore
-NuGet.config                       # Clears Windows-specific fallback paths for Docker builds
-appsettings.json                   # Serilog configuration + app settings
-AuthCore.API.csproj
-docker-compose.yml
-Dockerfile
-Program.cs
+```
+AuthCore.API/
+├── src/
+│   ├── AuthCore.Domain/
+│   │   ├── Entities/          # User, Role, UserRole, RefreshToken, PasswordResetToken
+│   │   ├── Interfaces/        # IUserRepository, IRoleRepository, ITokenRepository, IUnitOfWork
+│   │   ├── Enums/             # UserStatus, TokenType
+│   │   ├── Exceptions/        # DomainException, NotFoundException, UnauthorizedException
+│   │   ├── Events/            # UserRegisteredEvent, PasswordResetRequestedEvent
+│   │   └── Common/            # BaseEntity, ErrorCodes
+│   │
+│   ├── AuthCore.Application/
+│   │   ├── Features/
+│   │   │   ├── Auth/          # Register, Login, ForgotPassword, ResetPassword
+│   │   │   ├── Users/         # UpdateProfile, ChangePassword, UploadAvatar, DeleteAccount
+│   │   │   ├── Admin/         # AssignRole, BanUser, ListUsers, GetUserDetails
+│   │   │   └── Tokens/        # RefreshToken, RevokeToken, RevokeAllTokens, GetActiveTokens
+│   │   ├── DTOs/              # AuthResponse, TokenResponse, UserResponse
+│   │   ├── Interfaces/        # IJwtService, IEmailService, IPasswordHasher, IOtpService
+│   │   ├── Behaviours/        # ValidationBehaviour, LoggingBehaviour, PerformanceBehaviour
+│   │   └── DependencyInjection.cs
+│   │
+│   ├── AuthCore.Infrastructure/
+│   │   ├── Persistence/       # AppDbContext, Repositories, EF Configurations, Migrations
+│   │   ├── Services/          # JwtTokenService, RefreshTokenService, PasswordHasher, OtpService
+│   │   ├── Email/             # EmailService, HTML templates (Welcome, PasswordReset)
+│   │   ├── BackgroundJobs/    # CleanExpiredTokensJob, SendEmailJob
+│   │   └── DependencyInjection.cs
+│   │
+│   └── AuthCore.API/
+│       ├── Controllers/       # AuthController, UsersController, TokensController, AdminController
+│       ├── Middleware/        # ExceptionMiddleware, RequestLoggingMiddleware, CorrelationIdMiddleware
+│       ├── Filters/           # ValidationFilter
+│       ├── Extensions/        # ServiceCollectionExtensions, AuthExtensions, SwaggerExtensions
+│       ├── Models/            # ApiResponse<T>
+│       ├── appsettings.json
+│       ├── Program.cs
+│       └── Dockerfile
+│
+├── tests/
+│   ├── AuthCore.UnitTests/        # Handler and validator unit tests
+│   └── AuthCore.IntegrationTests/ # Full API tests with Testcontainers
+│
+├── docker-compose.yml
+├── docker-compose.override.yml
+└── AuthCore.sln
 ```
 
 ---
 
 ## Getting Started
 
-### Option A — Local development
+### Prerequisites
 
-#### Prerequisites
-- [.NET 8 SDK](https://dotnet.microsoft.com/download)
-- [PostgreSQL 14+](https://www.postgresql.org/download/)
-- [Redis 7+](https://redis.io/download/) (or run via Docker: `docker run -d -p 6379:6379 redis:7-alpine`)
-- EF Core CLI: `dotnet tool install --global dotnet-ef`
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [dotnet-ef CLI tools](https://learn.microsoft.com/en-us/ef/core/cli/dotnet)
 
-#### 1. Clone & restore
 ```bash
-git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
-dotnet restore
+dotnet tool install --global dotnet-ef
 ```
 
-#### 2. Configure `.env`
+### Run with Docker
+
+The fastest way to get everything running — API + PostgreSQL with a single command:
+
 ```bash
-cp .env.example .env
-```
-
-Fill in all values — database connection, Redis connection string, JWT secret, SMTP credentials, and seed admin details.
-
-> **Gmail SMTP**: use an [App Password](https://myaccount.google.com/apppasswords), not your regular Gmail password. Enable 2FA first, then generate an app password under *Security → 2-Step Verification → App passwords*.
-
-#### 3. Create the PostgreSQL database
-```bash
-psql -U postgres -c "CREATE DATABASE AuthCoreDB;"
-```
-
-#### 4. Apply migrations
-```bash
-dotnet ef database update
-```
-
-#### 5. Run
-```bash
-dotnet run
-```
-
-Open **http://localhost:5000/swagger** 🎉
-
-> **First login**: use the admin credentials you set in `.env` under `Seed__Admin__*`.
-
----
-
-### Option B — Docker (recommended)
-
-#### Prerequisites
-- [Docker Desktop](https://www.docker.com/products/docker-desktop)
-
-#### 1. Clone
-```bash
-git clone https://github.com/abdelrahman-kamel-elgendy/AuthCore.API.git
+git clone https://github.com/your-org/AuthCore.API.git
 cd AuthCore.API
+
+docker-compose up --build
 ```
 
-#### 2. Configure `.env.docker`
-```bash
-cp .env.docker.example .env.docker
-```
+The API will be available at `http://localhost:5001` and Swagger at `http://localhost:5001/swagger`.
 
-Fill in your values — the format matches `.env.example` but uses Docker-specific variable names.
+The Hangfire dashboard is available at `http://localhost:5001/jobs`.
 
-#### 3. Start the stack
-```bash
-docker compose --env-file .env.docker up -d
-```
+### Run Locally
 
-This pulls PostgreSQL and Redis, builds the API image, runs migrations automatically, and seeds the admin account. The API will not start until PostgreSQL and Redis both pass their health checks.
-
-Open **http://localhost:8080/swagger** 🎉
-
-#### Useful Docker commands
+**1. Start PostgreSQL** (or use the Docker Compose database only):
 
 ```bash
-# View live API logs
-docker compose --env-file .env.docker logs -f api
-
-# Check container status and health
-docker compose --env-file .env.docker ps
-
-# Rebuild after code changes
-docker compose --env-file .env.docker build --no-cache
-docker compose --env-file .env.docker up -d
-
-# Inspect the Redis blacklist
-docker compose exec redis redis-cli keys "blacklist:jti:*"
-
-# Stop everything (keeps database and Redis data)
-docker compose down
-
-# Stop and wipe all volumes
-docker compose down -v
+docker-compose up postgres -d
 ```
 
----
+**2. Update connection string** in `src/AuthCore.API/appsettings.Development.json`:
 
-## API Reference
-
-### Auth: `api/auth`
-
-| Method | Route | Auth | Rate Limit | Description |
-|---|---|---|---|---|
-| `POST` | `/register` | — | 3 / 5 min / IP | Register new account, sends confirmation email |
-| `GET` | `/confirm-email?userId=&token=` | — | — | Confirm email via link, sends welcome email |
-| `POST` | `/login` | — | 5 / 1 min / IP | Login, returns access + refresh token |
-| `POST` | `/refresh-token` | — | 60 / 1 min / IP | Rotate refresh token |
-| `POST` | `/logout` | Bearer | — | Blacklist access token in Redis + revoke refresh token |
-| `POST` | `/forgot-password` | — | 3 / 15 min / IP | Send password reset link (always returns 200) |
-| `POST` | `/reset-password` | — | — | Reset password, revokes all refresh tokens |
-
----
-
-#### `POST /api/auth/register`
 ```json
 {
-  "firstName":       "John",
-  "lastName":        "Doe",
-  "username":        "johndoe",
-  "email":           "john@example.com",
-  "password":        "Secret@123",
-  "confirmPassword": "Secret@123"
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=authcore;Username=postgres;Password=postgres"
+  }
 }
 ```
-Optional: `phoneNumber`, `address`, `birthDate`, `profileURL`.
+
+**3. Apply migrations:**
+
+```bash
+dotnet ef database update \
+  --project src/AuthCore.Infrastructure \
+  --startup-project src/AuthCore.API
+```
+
+**4. Run the API:**
+
+```bash
+dotnet run --project src/AuthCore.API
+```
+
+---
+
+## Configuration
+
+All configuration is in `appsettings.json`. Override values per environment using `appsettings.{Environment}.json` or environment variables (recommended for production secrets).
 
 ```json
 {
-  "status":  201,
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=authcore;Username=postgres;Password=yourpassword"
+  },
+  "JwtSettings": {
+    "SecretKey": "your-super-secret-key-minimum-32-characters",
+    "Issuer": "AuthCore.API",
+    "Audience": "AuthCore.Clients",
+    "AccessTokenExpiryMinutes": 15,
+    "RefreshTokenExpiryDays": 7
+  },
+  "EmailSettings": {
+    "SmtpHost": "smtp.yourprovider.com",
+    "SmtpPort": 587,
+    "FromEmail": "noreply@yourapp.com",
+    "FromName": "AuthCore"
+  },
+  "RateLimiting": {
+    "EnableEndpointRateLimiting": true,
+    "StackBlockedRequests": false,
+    "GeneralRules": [
+      {
+        "Endpoint": "*",
+        "Period": "1m",
+        "Limit": 60
+      },
+      {
+        "Endpoint": "*/auth/login",
+        "Period": "5m",
+        "Limit": 10
+      }
+    ]
+  }
+}
+```
+
+> **Never commit real secrets.** Use environment variables, Azure Key Vault, AWS Secrets Manager, or Docker secrets in production.
+
+---
+
+## API Endpoints
+
+All endpoints return a consistent envelope:
+
+```json
+{
   "success": true,
-  "message": "Registration successful. Please check your email for confirmation.",
-  "data": {
-    "token":    "eyJhbGci...",
-    "userId":   "abc-123",
-    "userName": "johndoe",
-    "email":    "john@example.com"
-  }
+  "data": { },
+  "message": "string",
+  "errors": []
 }
 ```
 
+### Auth — `/api/v1/auth`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/register` | Public | Create a new user account |
+| `POST` | `/login` | Public | Login and receive access + refresh tokens |
+| `POST` | `/forgot-password` | Public | Send password reset email |
+| `POST` | `/reset-password` | Public | Reset password using OTP token |
+| `POST` | `/verify-email` | Public | Verify email address |
+
+### Tokens — `/api/v1/tokens`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `POST` | `/refresh` | Public | Exchange a refresh token for a new token pair |
+| `POST` | `/revoke` | Bearer | Revoke the current refresh token |
+| `POST` | `/revoke-all` | Bearer | Revoke all refresh tokens (logout everywhere) |
+| `GET` | `/active` | Bearer | List all active sessions for the current user |
+
+### Users — `/api/v1/users`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/me` | Bearer | Get current user profile |
+| `PUT` | `/me` | Bearer | Update profile (name, avatar) |
+| `PUT` | `/me/password` | Bearer | Change password |
+| `POST` | `/me/avatar` | Bearer | Upload avatar image |
+| `DELETE` | `/me` | Bearer | Delete own account |
+
+### Admin — `/api/v1/admin`
+
+| Method | Endpoint | Auth | Description |
+|---|---|---|---|
+| `GET` | `/users` | Admin | List all users (paginated, filterable) |
+| `GET` | `/users/{id}` | Admin | Get a specific user's full details |
+| `POST` | `/users/{id}/roles` | Admin | Assign a role to a user |
+| `DELETE` | `/users/{id}/roles/{role}` | Admin | Remove a role from a user |
+| `POST` | `/users/{id}/ban` | Admin | Ban a user |
+| `POST` | `/users/{id}/unban` | Admin | Unban a user |
+
 ---
 
-#### `POST /api/auth/login`
-```json
-{
-  "email":    "john@example.com",
-  "password": "Secret@123"
-}
+## Authentication Flow
+
+### Login & token refresh
+
+```
+Client                          AuthCore.API                    PostgreSQL
+  │                                  │                               │
+  │─── POST /auth/login ────────────►│                               │
+  │                                  │──── Verify user + password ──►│
+  │                                  │◄─── User record ──────────────│
+  │◄── { accessToken, refreshToken }─│                               │
+  │                                  │                               │
+  │  (15 min later, access expires)  │                               │
+  │                                  │                               │
+  │─── POST /tokens/refresh ────────►│                               │
+  │    { refreshToken }              │──── Validate + rotate ────────►│
+  │                                  │◄─── New token stored ─────────│
+  │◄── { new accessToken,           ─│                               │
+  │      new refreshToken }          │                               │
 ```
 
-```json
-{
-  "status":  200,
-  "success": true,
-  "message": "Login successful.",
-  "data": {
-    "token":        "eyJhbGci...",
-    "refreshToken": "abc123...",
-    "expiration":   "2026-03-09T14:00:00Z",
-    "userId":       "abc-123",
-    "userName":     "johndoe",
-    "email":        "john@example.com",
-    "roles":        ["User"]
-  }
-}
-```
+### Token verification in other services
 
----
+Other microservices **do not call AuthCore.API** to verify tokens. They validate the JWT signature locally using the shared public key or secret:
 
-#### `POST /api/auth/logout`
-Requires `Authorization: Bearer {token}`.
-- Extracts the `jti` claim from the access token
-- Writes `blacklist:jti:{jti}` to Redis with TTL = remaining token lifetime
-- Revokes the refresh token server-side
-- Reusing the access token after logout returns `401 Token has been revoked`
-
----
-
-#### `POST /api/auth/forgot-password`
-```json
-{ "email": "john@example.com" }
-```
-Always returns `200` — never reveals whether the email exists.
-
----
-
-#### `POST /api/auth/reset-password`
-```json
-{
-  "userId":          "abc-123",
-  "token":           "reset_token_from_email",
-  "password":        "NewSecret@456",
-  "confirmPassword": "NewSecret@456"
-}
-```
-
----
-
-### User: `api/user` *(Bearer required)*
-
-| Method | Route | Description |
-|---|---|---|
-| `GET` | `/me` | Get own profile |
-| `PUT` | `/me` | Update profile fields |
-| `PUT` | `/me/change-password` | Change password, forces re-login |
-
-#### `PUT /api/user/me`
-All fields optional — only provided fields are updated:
-```json
-{
-  "firstName":   "Jane",
-  "lastName":    "Doe",
-  "phoneNumber": "+1234567890",
-  "address":     "123 Main St",
-  "profileURL":  "https://example.com/avatar.png",
-  "birthDate":   "1995-06-15"
-}
-```
-
-#### `PUT /api/user/me/change-password`
-```json
-{
-  "currentPassword": "Secret@123",
-  "newPassword":     "NewSecret@456",
-  "confirmPassword": "NewSecret@456"
-}
-```
-
----
-
-### Admin: `api/admin` *(Admin role required)*
-
-| Method | Route | Description |
-|---|---|---|
-| `GET` | `/users?pageNumber=1&pageSize=10` | Paginated user list (max 50/page) |
-| `GET` | `/users/{userId}` | Get user by ID |
-| `POST` | `/users/{userId}/promote` | Add Admin role |
-| `POST` | `/users/{userId}/demote` | Remove Admin role |
-| `POST` | `/users/{userId}/activate` | Re-enable account |
-| `POST` | `/users/{userId}/deactivate` | Block login + revoke tokens |
-| `DELETE` | `/users/{userId}` | Permanently delete user |
-
-Pagination metadata is returned in the `X-Pagination` response header:
-```json
-{
-  "currentPage": 1,
-  "totalPages":  3,
-  "pageSize":    10,
-  "totalCount":  21,
-  "hasPrevious": false,
-  "hasNext":     true
-}
-```
-
----
-
-## Response Format
-
-Every endpoint returns the same envelope:
-
-```json
-{
-  "status":  200,
-  "success": true,
-  "message": "...",
-  "data":    { },
-  "errors":  ["..."],
-  "validationErrors": {
-    "fieldName": ["error message"]
-  }
-}
-```
-
-`errors` and `validationErrors` are omitted when empty. All `401` and `429` responses also return this format — never a blank body.
-
----
-
-## Health Checks
-
-`GET /health` — no authentication required.
-
-Returns `200 OK` when all dependencies are healthy, `503 Service Unavailable` when any check fails.
-
-```json
-{
-  "status": "Healthy",
-  "totalDuration": "00:00:00.0500",
-  "entries": {
-    "npgsql": {
-      "status":   "Healthy",
-      "duration": "00:00:00.0120"
-    },
-    "smtp": {
-      "status":      "Healthy",
-      "description": "SMTP reachable at smtp.gmail.com:587.",
-      "duration":    "00:00:00.0380"
-    }
-  }
-}
-```
-
-| Check | What It Verifies |
-|---|---|
-| `npgsql` | Opens a real connection to PostgreSQL and runs a ping query |
-| `smtp` | Opens a TCP connection to the configured SMTP host and port |
-
----
-
-## Rate Limiting
-
-| Endpoint | Limit | Window |
-|---|---|---|
-| `POST /login` | 5 requests | per IP / per minute |
-| `POST /register` | 3 requests | per IP / per 5 min |
-| `POST /forgot-password` | 3 requests | per IP / per 15 min |
-| All other endpoints | 60 requests | per IP / per minute |
-
-The rate limiter reads `X-Forwarded-For` first so it correctly identifies real client IPs when running behind a reverse proxy (Nginx, Cloudflare, etc.).
-
----
-
-## Security Headers
-
-| Header | Value | Protects Against |
-|---|---|---|
-| `X-Content-Type-Options` | `nosniff` | MIME-type confusion attacks |
-| `X-Frame-Options` | `DENY` | Clickjacking via iframes |
-| `X-XSS-Protection` | `1; mode=block` | XSS in legacy browsers |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` | Referrer info leakage |
-| `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=()` | Unwanted browser feature access |
-| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | SSL stripping, HTTPS downgrade attacks |
-| `Content-Security-Policy` | `default-src 'none'; frame-ancestors 'none'` | XSS, data injection, framing |
-
-> `Strict-Transport-Security` is only sent over HTTPS and is intentionally omitted on plain HTTP to avoid breaking local development.
->
-> The `Content-Security-Policy` is relaxed automatically for `/swagger` routes in development to allow Swagger UI assets to load correctly.
-
----
-
-## Structured Logging
-
-Serilog replaces the default .NET logger. Configuration lives in `appsettings.json` under the `Serilog` section — no code changes needed to adjust log levels or add sinks.
-
-Every HTTP request is logged with method, path, status code, duration, client IP, and user agent. Swagger traffic (`/swagger/*`) is logged at `Verbose` level and suppressed by default to keep logs clean.
-
----
-
-## Strongly-Typed Configs
-
-All environment variables are bound to typed classes in `Configs/` and validated at startup using Data Annotations + `.ValidateOnStart()`. The app **will not start** if any required variable is missing or invalid.
-
-| Class | Env Prefix | Key Variables |
-|---|---|---|
-| `JwtConfigs` | `JWT__` | `SecretKey`, `ValidIssuer`, `ValidAudience`, expiry |
-| `SmtpConfigs` | `Smtp__` | `Host`, `Port`, `Username`, `Password`, `EnableSsl` |
-| `SeedConfigs` | `Seed__Admin__` | Admin account credentials |
-| `AppConfigs` | `App__` | `BaseUrl` |
-| `RedisConfigs` | `Redis__` | `ConnectionString` |
-
-To inject Configs into a service:
 ```csharp
-public class EmailService(IOptions<SmtpConfigs> smtpOptions)
+// In any other .NET microservice
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidIssuer   = "AuthCore.API",
+            ValidAudience = "AuthCore.Clients",
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(configuration["JwtSettings:SecretKey"]!)),
+            ValidateLifetime = true
+        };
+    });
+```
+
+---
+
+## Database Migrations
+
+```bash
+# Create a new migration after changing domain entities
+dotnet ef migrations add <MigrationName> \
+  --project src/AuthCore.Infrastructure \
+  --startup-project src/AuthCore.API \
+  --output-dir Persistence/Migrations
+
+# Apply pending migrations
+dotnet ef database update \
+  --project src/AuthCore.Infrastructure \
+  --startup-project src/AuthCore.API
+
+# Roll back to a specific migration
+dotnet ef database update <PreviousMigrationName> \
+  --project src/AuthCore.Infrastructure \
+  --startup-project src/AuthCore.API
+
+# Generate SQL script (for production deployments)
+dotnet ef migrations script \
+  --project src/AuthCore.Infrastructure \
+  --startup-project src/AuthCore.API \
+  --output migrations.sql
+```
+
+---
+
+## Background Jobs
+
+Hangfire runs inside the same process and uses PostgreSQL as its storage backend. Jobs are registered in `Infrastructure/BackgroundJobs/HangfireSetup.cs`.
+
+| Job | Schedule | Description |
+|---|---|---|
+| `CleanExpiredTokensJob` | Every hour | Deletes refresh tokens past their expiry date |
+| `SendEmailJob` | On demand | Queued by handlers for async email delivery |
+| `AuditLogJob` | On demand | Persists audit trail entries without blocking requests |
+
+The Hangfire dashboard is available at `/jobs` (restrict this to admin users in production via `IAuthorizationFilter`).
+
+---
+
+## Testing
+
+```bash
+# Run all tests
+dotnet test
+
+# Run only unit tests
+dotnet test tests/AuthCore.UnitTests
+
+# Run only integration tests (requires Docker for Testcontainers)
+dotnet test tests/AuthCore.IntegrationTests
+
+# Run with coverage report
+dotnet test --collect:"XPlat Code Coverage"
+```
+
+Integration tests use **Testcontainers** to spin up a real PostgreSQL instance per test run — no mocking of the database layer.
+
+---
+
+## Integration with Other Services
+
+AuthCore.API exposes two integration contracts:
+
+**1. JWT tokens** — validated locally by any service sharing the same `JwtSettings:SecretKey`. Token claims include `sub` (user ID), `email`, `roles`, and `jti` (token ID for revocation tracking).
+
+**2. Domain events** — events raised inside domain aggregates (`UserRegisteredEvent`, `PasswordResetRequestedEvent`) are ready to be forwarded to a message broker. To enable this, implement `INotificationHandler<UserRegisteredEvent>` in Infrastructure and publish to RabbitMQ, Kafka, or Azure Service Bus:
+
+```csharp
+public class UserRegisteredEventHandler : INotificationHandler<UserRegisteredEvent>
 {
-    private readonly SmtpConfigs _smtp = smtpOptions.Value;
+    private readonly IMessageBus _bus;
+    public UserRegisteredEventHandler(IMessageBus bus) => _bus = bus;
+
+    public async Task Handle(UserRegisteredEvent notification, CancellationToken ct)
+        => await _bus.PublishAsync("user.registered", notification, ct);
 }
 ```
 
-> **Docker note**: ASP.NET Core automatically converts `__` to `:` in environment variable names. In `docker-compose.yml` set `Redis__ConnectionString: "redis:6379"` — the app reads it as `Redis:ConnectionString`. In `.env` (local), use `Redis__ConnectionString=localhost:6379` directly.
+Other services (e.g. a notification service, a billing service) subscribe to this event independently — no tight coupling to AuthCore.
 
 ---
 
-## Email Templates
+## Roadmap
 
-All templates live in `Templates/Email/` and use `{{Placeholder}}` syntax.
-
-| Template | Trigger | Placeholders |
-|---|---|---|
-| `ConfirmEmail.html` | On register | `{{FirstName}}`, `{{ConfirmUrl}}`, `{{Year}}` |
-| `WelcomeEmail.html` | After email confirmed | `{{FirstName}}`, `{{UserName}}`, `{{Email}}`, `{{Role}}`, `{{LoginUrl}}`, `{{Year}}` |
-| `ResetPassword.html` | On forgot-password | `{{FirstName}}`, `{{ResetUrl}}`, `{{Year}}` |
-
----
-
-## Security
-
-| Concern | Approach |
-|---|---|
-| Secrets | `.env` via DotNetEnv (Development only), gitignored; validated at startup |
-| Passwords | PBKDF2 + salt (ASP.NET Identity) |
-| Access token | JWT HS256 · 1 hr · `ClockSkew = 0` |
-| Token blacklist | Redis `EXISTS` check on every request · O(1) lookup · auto TTL expiry |
-| Refresh token | 64 random bytes · 7 days · rotated on every use |
-| Rate limiting | Per-IP fixed-window on auth endpoints; `429` + `Retry-After` |
-| Security headers | `HSTS`, `CSP`, `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy` on every response |
-| HTTPS | Enforced in non-development environments |
-| Proxy support | `X-Forwarded-For` / `X-Forwarded-Proto` via `ForwardedHeaders` middleware |
-| User enumeration | Login and forgot-password always return the same message |
-| Email confirmation | Required before login is allowed |
-| Account lockout | 5 failed attempts → 15-minute lockout |
-| Password policy | Min 8 chars, uppercase, lowercase, digit, special character |
-| Password change | Revokes all refresh tokens → forces re-login |
-| Password reset | Decodes URL-encoded token · revokes all refresh tokens |
-| Account deactivation | Revokes tokens immediately, blocks all future logins |
-| Stack trace | Only exposed in `Development` environment |
+- [ ] Email verification on registration
+- [ ] Two-factor authentication (TOTP via Google Authenticator)
+- [ ] OAuth2 social login (Google, GitHub)
+- [ ] Audit log table with admin query endpoint
+- [ ] OpenTelemetry tracing for distributed tracing across services
+- [ ] gRPC endpoint for internal service-to-service token introspection
+- [ ] Kubernetes Helm chart
 
 ---
 
-## Stack
+## License
 
-| | |
-|---|---|
-| Framework | ASP.NET Core 8 |
-| ORM | Entity Framework Core 8 |
-| Database | PostgreSQL via Npgsql |
-| Cache / Blacklist | Redis 7 via StackExchange.Redis |
-| Identity | ASP.NET Core Identity |
-| Logging | Serilog |
-| Containerization | Docker + Docker Compose |
-| Secrets | DotNetEnv 3.1 |
-| Docs | Swashbuckle / Swagger 6.5 |
+MIT License — see [LICENSE](LICENSE) for details.

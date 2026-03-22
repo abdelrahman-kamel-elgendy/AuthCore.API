@@ -1,38 +1,268 @@
-## .NET Core
+# ============================================================
+# AuthCore.API — .gitignore
+# .NET Core 8 · PostgreSQL · Docker · Rider · VS · VS Code
+# ============================================================
+
+
+# ==========================================================
+# .NET build output
+# ==========================================================
 bin/
 obj/
 out/
 publish/
+*.dll
+*.exe
+*.pdb
+*.mdb
+*.cache
 *.user
 *.suo
-*.userprefs
+*.userosscache
 *.sln.docstates
-.vs/
-.vscode/
-*.slnx
 *.sln
+project.lock.json
+project.fragment.lock.json
+artifacts/
 
-## User-specific files
-appsettings.*.json
-!appsettings.json
-!appsettings.Development.json
 
-## Databases
-*.mdf
-*.ldf
-*.db
-*.db3
-*.sqlite
+# ==========================================================
+# .NET Core specific
+# ==========================================================
+*.runtimeconfig.json
+*.deps.json
+launchSettings.json
+!**/Properties/launchSettings.json
 
-## Migrations
-Migrations
 
-## Logs
+# ==========================================================
+# NuGet
+# ==========================================================
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+nuget.config
+!**/nuget.config
+**/[Pp]ackages/
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+
+# ==========================================================
+# Entity Framework Core
+# NOTE: migrations are intentionally tracked — only ignoring EF temp files
+# ==========================================================
+*.efbackup
+efpt.config.noda
+
+
+# ==========================================================
+# Secrets & environment — NEVER commit these
+# ==========================================================
+appsettings.Production.json
+appsettings.Staging.json
+appsettings.Local.json
+appsettings.*.local.json
+**/secrets.json
+**/*.pfx
+**/*.p12
+**/*.key
+**/*.pem
+**/*.cer
+**/*.crt
+.env
+.env.*
+!.env.example
+*.env
+
+# User secrets (dotnet user-secrets)
+**/secrets/
+%APPDATA%/Microsoft/UserSecrets/
+~/.microsoft/usersecrets/
+
+
+# ==========================================================
+# Docker
+# ==========================================================
+docker-compose.override.yml
+.docker/
+
+
+# ==========================================================
+# PostgreSQL / database
+# ==========================================================
+*.sql.bak
+*.dump
+*.pgdump
+pgdata/
+postgres-data/
+
+
+# ==========================================================
+# Logs
+# ==========================================================
 logs/
 *.log
+*.log.*
+Serilog/
+serilog-logs/
+nlog.config.bak
 
-## .env files
-.env
 
-## docker
-.env.docker
+# ==========================================================
+# Test results & coverage
+# ==========================================================
+TestResults/
+coverage/
+coverage.xml
+coverage.json
+*.trx
+*.coveragexml
+*.coverage
+lcov.info
+opencover.xml
+cobertura.xml
+report/
+
+
+# ==========================================================
+# Hangfire
+# ==========================================================
+App_Data/
+hangfire.db
+hangfire-*.db
+
+
+# ==========================================================
+# Visual Studio
+# ==========================================================
+.vs/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+*.pidb
+*.svclog
+*.scc
+_Codebase/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+Generated\ Files/
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.vspscc
+*.vssscc
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.ipch
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.vsix
+*.zip
+*.7z
+*.bak
+*.swp
+
+
+# ==========================================================
+# Visual Studio Code
+# ==========================================================
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.code-workspace
+.history/
+
+
+# ==========================================================
+# JetBrains Rider
+# ==========================================================
+.idea/
+*.sln.iml
+.idea/.idea.*/
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+*.dotCover
+
+
+# ==========================================================
+# OS generated
+# ==========================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# Linux
+*~
+.nfs*
+
+
+# ==========================================================
+# CI / CD
+# ==========================================================
+.github/workflows/*.local.yml
+
+
+# ==========================================================
+# Swagger / OpenAPI generated clients
+# ==========================================================
+**/swagger-generated/
+nswag.json.bak
+
+
+# ==========================================================
+# Certificates (local dev HTTPS)
+# ==========================================================
+*.pfx
+https/
+devcerts/
