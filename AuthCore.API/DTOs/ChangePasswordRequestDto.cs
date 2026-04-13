@@ -4,7 +4,8 @@ namespace AuthCore.API.DTOs.User;
 
 public class ChangePasswordRequestDto
 {
-    [Required, DataType(DataType.Password)]
+    [Required(ErrorMessage = "Current password is required!")]
+    [DataType(DataType.Password)]
     public string CurrentPassword { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Password is required!")]

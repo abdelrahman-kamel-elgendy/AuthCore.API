@@ -1,5 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 
+namespace AuthCore.API.Validators;
+
 public static class DateValidator
 {
     public static ValidationResult? Validate(DateTime? birthDate)

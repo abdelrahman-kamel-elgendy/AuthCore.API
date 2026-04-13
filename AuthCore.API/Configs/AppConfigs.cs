@@ -9,4 +9,7 @@ public class AppConfigs
     [Required(ErrorMessage = "AppBaseUrl is required.")]
     [Url(ErrorMessage = "AppBaseUrl must be a valid URL.")]
     public string BaseUrl { get; init; } = string.Empty;
+
+    [Url(ErrorMessage = "FrontendUrl must be a valid URL.")]
+    public string? FrontendUrl { get; set; }
 }

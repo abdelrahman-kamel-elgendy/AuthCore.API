@@ -7,6 +7,6 @@ public class SeedConfigs
 {
     public const string SectionName = "Seed";
 
-    [Required]
-    public RegisterRequestDto Admin { get; init; } = new();
+    [Required(ErrorMessage = "Admin configuration is required.")]
+    public AdminConfigs Admin { get; set; } = new();
 }

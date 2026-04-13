@@ -23,7 +23,6 @@ public class UserService(IAuthRepository authRepository) : IUserService
             LastName = user.LastName,
             PhoneNumber = user.PhoneNumber,
             ProfileURL = user.ProfileURL,
-            Address = user.Address,
             BirthDate = user.BirthDate
         };
     }
@@ -36,10 +35,6 @@ public class UserService(IAuthRepository authRepository) : IUserService
             user.FirstName = dto.FirstName;
         if (dto.LastName is not null)
             user.LastName = dto.LastName;
-        if (dto.PhoneNumber is not null)
-            user.PhoneNumber = dto.PhoneNumber;
-        if (dto.Address is not null)
-            user.Address = dto.Address;
         if (dto.ProfileURL is not null)
             user.ProfileURL = dto.ProfileURL;
         if (dto.BirthDate is not null)

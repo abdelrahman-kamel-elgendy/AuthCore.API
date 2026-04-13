@@ -16,6 +16,9 @@ public class JwtConfigs
     [Required(ErrorMessage = "JWT ValidAudience is required.")]
     public string ValidAudience { get; init; } = string.Empty;
 
-    public int AccessTokenExpiryMinutes { get; init; } = 60;    // default: 1 hour
-    public int RefreshTokenExpiryDays { get; init; } = 7;     // default: 7 days
+    [Range(1, 720, ErrorMessage = "Access token expiry must be between 1 and 720 minutes.")]
+    public int AccessTokenExpiryMinutes { get; init; } = 60;
+
+    [Range(1, 30, ErrorMessage = "Refresh token expiry must be between 1 and 30 days.")]
+    public int RefreshTokenExpiryDays { get; init; } = 7;
 }

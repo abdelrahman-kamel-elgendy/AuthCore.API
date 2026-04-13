@@ -5,6 +5,16 @@ namespace AuthCore.API.Repositories;
 
 public interface IAuthRepository
 {
+    Task<RefreshToken?> GetRefreshTokenAsync(string token);
+    Task CreateRefreshTokenAsync(RefreshToken refreshToken);
+    Task RevokeRefreshTokenAsync(RefreshToken refreshToken, string revokedByIp);
+    Task RevokeAllUserTokensAsync(string userId, string revokedByIp);
+    Task CreatePasswordResetTokenAsync(PasswordResetToken resetToken);
+    Task<PasswordResetToken?> GetPasswordResetTokenAsync(string token);
+    Task MarkPasswordResetTokenAsUsedAsync(PasswordResetToken resetToken);
+    Task<bool> IsEmailConfirmedAsync(string userId);
+
+
     // User management
     Task<UserModel?> GetUserByIdAsync(string userId);
     Task<UserModel?> GetUserByEmailAsync(string email);
@@ -34,4 +44,8 @@ public interface IAuthRepository
     // Existence checks
     Task<bool> UserExistsByEmailAsync(string email);
     Task<bool> UserExistsByUserNameAsync(string userName);
+
+
+
+
 }

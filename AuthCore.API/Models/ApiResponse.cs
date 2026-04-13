@@ -1,32 +1,18 @@
-using System.Net;
 using System.Text.Json.Serialization;
 
 namespace AuthCore.API.Models;
 
-public class ApiResponse<T>
+public class ApiResponse<T>(bool? success, T? data, string? message)
 {
-    public HttpStatusCode Status { get; set; }
-    public bool Success { get; set; }
-    public string? Message { get; set; }
+    public bool Success { get; set; } = success ?? true;
+    public string? Message { get; set; } = message;
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public T? Data { get; set; }
+    public T? Data { get; set; } = data;
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? Errors { get; set; }
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public IDictionary<string, string[]>? ValidationErrors { get; set; }
-
-
-
-    public ApiResponse(bool success) => Success = success;
-
-    public ApiResponse(HttpStatusCode status, bool success, string? message, T? data)
-    {
-        Status = status;
-        Success = success;
-        Message = message;
-        Data = data;
-    }
+    public IDictionary<string, List<string>>? ValidationErrors { get; set; }
 }

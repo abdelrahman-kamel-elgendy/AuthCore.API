@@ -1,5 +1,4 @@
-using AuthCore.API.DTOs;
-using AuthCore.API.DTOs.Auth;
+using AuthCore.API.DTOs.User;
 using AuthCore.API.Models;
 
 namespace AuthCore.API.Services.Interfaces;
@@ -7,10 +6,10 @@ namespace AuthCore.API.Services.Interfaces;
 public interface IAdminService
 {
     Task<PagedList<UserResponseDto>> GetAllUsersAsync(int pageNumber, int pageSize);
-    Task<UserResponseDto> GetUserByIdAsync(string userId);
-    Task<AuthResponseDto> PromoteToAdminAsync(string userId);
-    Task<AuthResponseDto> DemoteFromAdminAsync(string userId);
-    Task<UserModel> DeactivateUserAsync(string userId);
-    Task<UserModel> ActivateUserAsync(string userId);
-    Task<UserModel> DeleteUserAsync(string userId);
+    Task<UserResponseDto> GetUserAsync(string userId);
+    Task PromoteToAdminAsync(string userId);
+    Task DemoteFromAdminAsync(string userId);
+    Task ActivateUserAsync(string userId);
+    Task DeactivateUserAsync(string userId, string revokedByIp);
+    Task DeleteUserAsync(string userId);
 }

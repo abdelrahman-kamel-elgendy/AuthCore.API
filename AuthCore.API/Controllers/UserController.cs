@@ -1,53 +1,65 @@
-using System.IdentityModel.Tokens.Jwt;
-using System.Net;
-using System.Security.Claims;
-using AuthCore.API.DTOs;
-using AuthCore.API.DTOs.Auth;
-using AuthCore.API.DTOs.User;
-using AuthCore.API.Models;
-using AuthCore.API.Repositories;
-using AuthCore.API.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using AuthCore.API.DTOs.User;
+using AuthCore.API.Models;
+using AuthCore.API.Services.Interfaces;
+using System.Security.Claims;
+using AuthCore.API.DTOs;
 
 namespace AuthCore.API.Controllers;
 
-[Route("api/[controller]")]
 [ApiController]
+[Route("api/[controller]")]
 [Authorize]
-public class UserController(IUserService userService) : ControllerBase
+public class UserController(IUserService userService, ILogger<UserController> logger) : ControllerBase
 {
     private readonly IUserService _userService = userService;
+    private readonly ILogger<UserController> _logger = logger;
 
-    private string GetCurrentUserId() =>
-        User.FindFirstValue(ClaimTypes.NameIdentifier)
-     ?? User.FindFirstValue(JwtRegisteredClaimNames.Sub)
-     ?? throw new UnauthorizedAccessException();
-
+    /// <summary>
+    /// Get current user profile
+    /// </summary>
     [HttpGet("me")]
-    public async Task<IActionResult> GetProfile() => Ok(
-        new ApiResponse<ProfileResponseDto>(
-            HttpStatusCode.OK,
-            true,
-            "Profile retrieved successfully.",
-            await _userService.GetProfileAsync(GetCurrentUserId())
-        ));
+    [ProducesResponseType(typeof(ApiResponse<UserResponseDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 401)]
+    public async Task<IActionResult> GetProfile()
+    {
+        var result = await _userService.GetProfileAsync(GetUserId());
+        return Ok(new ApiResponse<ProfileResponseDto>(true, result, "Profile retrieved successfully."));
+    }
 
+    /// <summary>
+    /// Update current user profile
+    /// </summary>
     [HttpPut("me")]
-    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest dto) => Ok(
-        new ApiResponse<ProfileResponseDto>(
-            HttpStatusCode.OK,
-            true,
-            "Profile updated successfully.",
-            await _userService.UpdateProfileAsync(GetCurrentUserId(), dto)
-        ));
+    [ProducesResponseType(typeof(ApiResponse<UserResponseDto>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 400)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 401)]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var result = await _userService.UpdateProfileAsync(GetUserId(), request);
+        return Ok(new ApiResponse<ProfileResponseDto>(true, result, "Profile updated successfully."));
+    }
 
+    /// <summary>
+    /// Change password
+    /// </summary>
     [HttpPut("me/change-password")]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto dto) => Ok(
-        new ApiResponse<object>(
-            HttpStatusCode.OK,
-            true,
-            "Password changed successfully. Please log in again.",
-            await _userService.ChangePasswordAsync(GetCurrentUserId(), dto)
-        ));
+    [ProducesResponseType(typeof(ApiResponse<object>), 200)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 400)]
+    [ProducesResponseType(typeof(ApiResponse<object>), 401)]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequestDto request)
+    {
+        await _userService.ChangePasswordAsync(GetUserId(), request);
+        return Ok(new ApiResponse<object>(true, null, "Password changed successfully. Please login again."));
+    }
+
+    private string GetUserId()
+    {
+        var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        if (string.IsNullOrEmpty(userIdClaim))
+            throw new UnauthorizedAccessException("User ID not found in token");
+
+        return userIdClaim;
+    }
 }

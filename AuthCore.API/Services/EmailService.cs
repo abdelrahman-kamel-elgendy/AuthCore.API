@@ -8,7 +8,7 @@ public class EmailService(IConfiguration config) : IEmailService
 {
     private readonly IConfiguration _config = config;
 
-    public async Task SendEmailAsync(string toEmail, string subject, string body)
+    private async Task SendEmailAsync(string toEmail, string subject, string body)
     {
         var smtp = _config.GetSection("Smtp");
         var host = smtp["Host"] ?? throw new InvalidOperationException("Smtp:Host not configured.");
@@ -35,7 +35,7 @@ public class EmailService(IConfiguration config) : IEmailService
         await client.SendMailAsync(message);
     }
 
-    public static string Render(string templateName, Dictionary<string, string> values)
+    private static string Render(string templateName, Dictionary<string, string> values)
     {
         var templatePath = Path.Combine(AppContext.BaseDirectory, "Templates", templateName);
         var html = File.ReadAllText(templatePath);
@@ -44,5 +44,43 @@ public class EmailService(IConfiguration config) : IEmailService
             html = html.Replace($"{{{{{key}}}}}", value);
 
         return html;
+    }
+
+    public Task SendConfirmationEmailAsync(string email, string firstName, string confirmationUrl)
+    {
+        var subject = "Please confirm your email";
+        var body = Render("ConfirmationEmail.html", new Dictionary<string, string>
+        {
+            { "FirstName", firstName },
+            { "ConfirmationUrl", confirmationUrl }
+        });
+
+        return SendEmailAsync(email, subject, body);
+    }
+
+    public Task SendWelcomeEmailAsync(string? email, string firstName, string v1, string v2, string loginUrl)
+    {
+        var subject = "Welcome to AuthCore!";
+        var body = Render("WelcomeEmail.html", new Dictionary<string, string>
+        {
+            { "FirstName", firstName },
+            { "V1", v1 },
+            { "V2", v2 },
+            { "LoginUrl", loginUrl }
+        });
+
+        return SendEmailAsync(email ?? string.Empty, subject, body);
+    }
+
+    public Task SendPasswordResetEmailAsync(string? email, string firstName, string resetUrl)
+    {
+        var subject = "Password Reset Request";
+        var body = Render("PasswordResetEmail.html", new Dictionary<string, string>
+        {
+            { "FirstName", firstName },
+            { "ResetUrl", resetUrl }
+        });
+
+        return SendEmailAsync(email ?? string.Empty, subject, body);
     }
 }

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using AuthCore.API.Validators;
 
 namespace AuthCore.API.DTOs.Auth;
 
@@ -7,6 +8,9 @@ public class RegisterRequestDto
     [Required(ErrorMessage = "First name is required!")]
     [StringLength(50, MinimumLength = 2, ErrorMessage = "First name must be between 2 and 50 characters!")]
     public string FirstName { get; set; } = string.Empty;
+
+    [StringLength(50, MinimumLength = 2, ErrorMessage = "Middle name must be between 2 and 50 characters!")]
+    public string? MiddleName { get; set; }
 
     [Required(ErrorMessage = "Last name is required!")]
     [StringLength(50, MinimumLength = 2, ErrorMessage = "Last name must be between 2 and 50 characters!")]
@@ -29,20 +33,13 @@ public class RegisterRequestDto
     public string Password { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "Please confirm your password")]
-    [Compare("Password", ErrorMessage = "Passwords do not match")]
+    [Compare(nameof(Password), ErrorMessage = "Passwords do not match.")]
     [DataType(DataType.Password)]
     public string ConfirmPassword { get; set; } = string.Empty;
 
     [Url(ErrorMessage = "Invalid URL format!")]
     [StringLength(200, ErrorMessage = "Profile URL cannot exceed 200 characters!")]
     public string? ProfileURL { get; set; }
-
-    [Phone(ErrorMessage = "Invalid phone number!")]
-    [StringLength(20, ErrorMessage = "Phone number cannot exceed 20 characters!")]
-    public string? PhoneNumber { get; set; }
-
-    [StringLength(200, ErrorMessage = "Address cannot exceed 200 characters!")]
-    public string? Address { get; set; }
 
     [DataType(DataType.Date)]
     [CustomValidation(typeof(DateValidator), nameof(DateValidator.Validate))]

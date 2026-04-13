@@ -1,90 +1,189 @@
-using AuthCore.API.Models;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using AuthCore.API.Data;
+using AuthCore.API.Models;
+using AuthCore.API.Exceptions;
+using Microsoft.AspNetCore.Identity;
 
 namespace AuthCore.API.Repositories;
 
-public class AuthRepository(
-    UserManager<UserModel> userManager,
-    RoleManager<IdentityRole> roleManager) : IAuthRepository
+public class AuthRepository(ApplicationDbContext context) : IAuthRepository
 {
-    private readonly UserManager<UserModel> _userManager = userManager;
-    private readonly RoleManager<IdentityRole> _roleManager = roleManager;
-
-    // == User Management =======================================================
-
-
-    public async Task<UserModel?> GetUserByIdAsync(string userId)
-        => await _userManager.FindByIdAsync(userId);
+    private readonly ApplicationDbContext _context = context;
 
     public async Task<UserModel?> GetUserByEmailAsync(string email)
-        => await _userManager.FindByEmailAsync(email);
-
-    public async Task<UserModel?> GetUserByUserNameAsync(string userName)
-        => await _userManager.FindByNameAsync(userName);
-
-    public async Task<bool> CheckPasswordAsync(UserModel user, string password)
-        => await _userManager.CheckPasswordAsync(user, password);
-
-    public async Task<IdentityResult> CreateUserAsync(UserModel user, string password) => await _userManager.CreateAsync(user, password);
-
-    public async Task<IdentityResult> UpdateUserAsync(UserModel user) => await _userManager.UpdateAsync(user);
-
-    public async Task<IdentityResult> DeleteUserAsync(UserModel user)
-        => await _userManager.DeleteAsync(user);
-
-    // == Role Management =======================================================
-
-    public async Task<IList<string>> GetUserRolesAsync(UserModel user)
-        => await _userManager.GetRolesAsync(user);
-
-    public async Task<IdentityResult> AddToRoleAsync(UserModel user, string role)
     {
-        if (!await _roleManager.RoleExistsAsync(role))
-            await _roleManager.CreateAsync(new IdentityRole(role));
-
-        return await _userManager.AddToRoleAsync(user, role);
+        return await _context.Users
+            .Include(u => u.UserPhones)
+            .Include(u => u.UserAddresses)
+            .FirstOrDefaultAsync(u => u.Email == email);
     }
 
-    public async Task<IdentityResult> RemoveFromRoleAsync(UserModel user, string role)
-        => await _userManager.RemoveFromRoleAsync(user, role);
-
-    public async Task<bool> IsInRoleAsync(UserModel user, string role)
-        => await _userManager.IsInRoleAsync(user, role);
-
-    public async Task<string> GenerateEmailConfirmationTokenAsync(UserModel user)
-        => await _userManager.GenerateEmailConfirmationTokenAsync(user);
-
-    public async Task<string> GeneratePasswordResetTokenAsync(UserModel user)
-        => await _userManager.GeneratePasswordResetTokenAsync(user);
-
-    public async Task<IdentityResult> ConfirmEmailAsync(UserModel user, string token)
-        => await _userManager.ConfirmEmailAsync(user, token);
-
-    public async Task<IdentityResult> ResetPasswordAsync(UserModel user, string token, string newPassword)
-        => await _userManager.ResetPasswordAsync(user, token, newPassword);
-
-    public async Task<UserModel?> GetUserByRefreshTokenAsync(string refreshToken)
-        => await _userManager.Users
-            .FirstOrDefaultAsync(u => u.RefreshToken == refreshToken);
-
-    public async Task SaveRefreshTokenAsync(UserModel user, string refreshToken, int expiryDays = 7)
+    public async Task<UserModel?> GetUserByIdAsync(string userId)
     {
-        user.RefreshToken = refreshToken;
-        user.RefreshTokenExpiryTime = DateTime.UtcNow.AddDays(expiryDays);
-        await _userManager.UpdateAsync(user);
+        return await _context.Users
+            .Include(u => u.UserPhones)
+            .Include(u => u.UserAddresses)
+            .FirstOrDefaultAsync(u => u.Id.Equals(userId));
     }
 
-    public async Task RevokeRefreshTokenAsync(UserModel user)
+    public async Task<RefreshToken?> GetRefreshTokenAsync(string token)
     {
-        user.RefreshToken = null;
-        user.RefreshTokenExpiryTime = DateTime.MinValue;
-        await _userManager.UpdateAsync(user);
+        return await _context.RefreshTokens
+            .Include(rt => rt.User)
+            .FirstOrDefaultAsync(rt => rt.Token == token);
     }
 
-    public async Task<bool> UserExistsByEmailAsync(string email)
-        => await _userManager.Users.AnyAsync(u => u.Email == email);
+    public async Task CreateRefreshTokenAsync(RefreshToken refreshToken)
+    {
+        await _context.RefreshTokens.AddAsync(refreshToken);
+        await _context.SaveChangesAsync();
+    }
 
-    public async Task<bool> UserExistsByUserNameAsync(string userName)
-        => await _userManager.Users.AnyAsync(u => u.UserName == userName);
+    public async Task RevokeRefreshTokenAsync(RefreshToken refreshToken, string revokedByIp)
+    {
+        refreshToken.RevokedAt = DateTime.UtcNow;
+        refreshToken.RevokedByIp = revokedByIp;
+        _context.RefreshTokens.Update(refreshToken);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task RevokeAllUserTokensAsync(string userId, string revokedByIp)
+    {
+        var tokens = await _context.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ToListAsync();
+
+        foreach (var token in tokens)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+            token.RevokedByIp = revokedByIp;
+        }
+
+        _context.RefreshTokens.UpdateRange(tokens);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task CreatePasswordResetTokenAsync(PasswordResetToken resetToken)
+    {
+        await _context.PasswordResetTokens.AddAsync(resetToken);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<PasswordResetToken?> GetPasswordResetTokenAsync(string token)
+    {
+        return await _context.PasswordResetTokens
+            .Include(prt => prt.User)
+            .FirstOrDefaultAsync(prt => prt.Token == token && !prt.IsUsed && prt.ExpiryDate > DateTime.UtcNow);
+    }
+
+    public async Task MarkPasswordResetTokenAsUsedAsync(PasswordResetToken resetToken)
+    {
+        resetToken.IsUsed = true;
+        resetToken.UsedAt = DateTime.UtcNow;
+        _context.PasswordResetTokens.Update(resetToken);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<bool> IsEmailConfirmedAsync(string userId)
+    {
+        var user = await _context.Users.FindAsync(userId);
+        return user?.EmailConfirmed ?? false;
+    }
+
+    public async Task UpdateUserAsync(UserModel user)
+    {
+        user.UpdatedAt = DateTime.UtcNow;
+        _context.Users.Update(user);
+        await _context.SaveChangesAsync();
+    }
+
+    public Task<UserModel?> GetUserByUserNameAsync(string userName)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<bool> CheckPasswordAsync(UserModel user, string password)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> CreateUserAsync(UserModel user, string password)
+    {
+        throw new NotImplementedException();
+    }
+
+    Task<IdentityResult> IAuthRepository.UpdateUserAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> DeleteUserAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IList<string>> GetUserRolesAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> AddToRoleAsync(UserModel user, string role)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> RemoveFromRoleAsync(UserModel user, string role)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<bool> IsInRoleAsync(UserModel user, string role)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<string> GenerateEmailConfirmationTokenAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<string> GeneratePasswordResetTokenAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> ConfirmEmailAsync(UserModel user, string token)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<IdentityResult> ResetPasswordAsync(UserModel user, string token, string newPassword)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<UserModel?> GetUserByRefreshTokenAsync(string refreshToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task SaveRefreshTokenAsync(UserModel user, string refreshToken, int expiryDays = 7)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task RevokeRefreshTokenAsync(UserModel user)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<bool> UserExistsByEmailAsync(string email)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<bool> UserExistsByUserNameAsync(string userName)
+    {
+        throw new NotImplementedException();
+    }
 }

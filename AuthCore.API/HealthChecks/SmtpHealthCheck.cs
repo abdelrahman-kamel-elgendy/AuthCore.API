@@ -1,13 +1,14 @@
 using System.Net.Sockets;
-using AuthCore.API.Configs;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using AuthCore.API.Configs;
 using Microsoft.Extensions.Options;
 
 namespace AuthCore.API.HealthChecks;
 
-public class SmtpHealthCheck(IOptions<SmtpConfigs> smtpOptions) : IHealthCheck
+public class SmtpHealthCheck(IOptions<SmtpConfigs> smtpConfigs, ILogger<SmtpHealthCheck> logger) : IHealthCheck
 {
-    private readonly SmtpConfigs _smtp = smtpOptions.Value;
+    private readonly SmtpConfigs _smtpConfigs = smtpConfigs.Value;
+    private readonly ILogger<SmtpHealthCheck> _logger = logger;
 
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
@@ -16,19 +17,31 @@ public class SmtpHealthCheck(IOptions<SmtpConfigs> smtpOptions) : IHealthCheck
         try
         {
             using var tcpClient = new TcpClient();
+            var connectTask = tcpClient.ConnectAsync(_smtpConfigs.Host, _smtpConfigs.Port);
+            var timeoutTask = Task.Delay(5000, cancellationToken);
 
-            await tcpClient.ConnectAsync(_smtp.Host, _smtp.Port, cancellationToken);
+            var completedTask = await Task.WhenAny(connectTask, timeoutTask);
 
-            return tcpClient.Connected
-                ? HealthCheckResult.Healthy($"SMTP reachable at {_smtp.Host}:{_smtp.Port}.")
-                : HealthCheckResult.Unhealthy($"Could not connect to SMTP at {_smtp.Host}:{_smtp.Port}.");
+            if (completedTask == timeoutTask)
+            {
+                _logger.LogWarning("SMTP health check timeout for {Host}:{Port}", _smtpConfigs.Host, _smtpConfigs.Port);
+                return HealthCheckResult.Degraded($"SMTP connection timeout to {_smtpConfigs.Host}:{_smtpConfigs.Port}");
+            }
+
+            await connectTask;
+
+            if (tcpClient.Connected)
+            {
+                tcpClient.Close();
+                return HealthCheckResult.Healthy($"SMTP reachable at {_smtpConfigs.Host}:{_smtpConfigs.Port}");
+            }
+
+            return HealthCheckResult.Unhealthy($"SMTP not reachable at {_smtpConfigs.Host}:{_smtpConfigs.Port}");
         }
         catch (Exception ex)
         {
-            return HealthCheckResult.Unhealthy(
-                $"SMTP check failed for {_smtp.Host}:{_smtp.Port}.",
-                exception: ex
-            );
+            _logger.LogError(ex, "SMTP health check failed");
+            return HealthCheckResult.Unhealthy($"SMTP check failed: {ex.Message}");
         }
     }
 }
